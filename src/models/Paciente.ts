@@ -1,6 +1,68 @@
 import { query, queryWithLimit } from '../config/database';
 import { Paciente, PacienteCreateInput, PacienteUpdateInput, PaginationParams, PaginatedResponse } from '../types';
 
+// Função auxiliar para converter datas no backend (adicione no início do arquivo)
+const convertDateToMySQL = (dateStr: string): string => {
+  if (!dateStr) return '';
+  
+  // Se já está no formato MySQL (YYYY-MM-DD), retorna como está
+  if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    return dateStr;
+  }
+  
+  // Se está no formato brasileiro (DD/MM/YYYY)
+  if (dateStr.includes('/')) {
+    const [day, month, year] = dateStr.split('/');
+    if (day && month && year && year.length === 4) {
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+  }
+  
+  // Se é uma data válida em outro formato, tenta converter
+  try {
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      return date.toISOString().split('T')[0];
+    }
+  } catch (error) {
+    console.warn('Erro ao converter data:', dateStr, error);
+  }
+  
+  return '';
+};
+
+// Função auxiliar para validar dados obrigatórios
+const validatePacienteData = (data: PacienteCreateInput): string[] => {
+  const errors: string[] = [];
+  
+  if (!data.Paciente_Nome?.trim()) {
+    errors.push('Nome do paciente é obrigatório');
+  }
+  
+  if (!data.Codigo?.trim()) {
+    errors.push('Código do paciente é obrigatório');
+  }
+  
+  if (!data.Data_Nascimento) {
+    errors.push('Data de nascimento é obrigatória');
+  } else {
+    const convertedDate = convertDateToMySQL(data.Data_Nascimento);
+    if (!convertedDate) {
+      errors.push('Data de nascimento inválida');
+    }
+  }
+  
+  if (!data.Cid_Diagnostico?.trim()) {
+    errors.push('CID do diagnóstico é obrigatório');
+  }
+  
+  if (!data.Sexo?.trim()) {
+    errors.push('Sexo é obrigatório');
+  }
+  
+  return errors;
+};
+
 export class PacienteModel {
   
   // Buscar todos os pacientes com paginação e filtros
@@ -153,55 +215,86 @@ export class PacienteModel {
   
   // Criar paciente
   static async create(pacienteData: PacienteCreateInput): Promise<Paciente> {
+    console.log('🔧 Dados recebidos para criação:', pacienteData);
+    
+    // Validar dados obrigatórios
+    const validationErrors = validatePacienteData(pacienteData);
+    if (validationErrors.length > 0) {
+        throw new Error(`Dados inválidos: ${validationErrors.join(', ')}`);
+    }
+    
+    // Converter e validar datas
+    const dataNascimento = convertDateToMySQL(pacienteData.Data_Nascimento);
+    const dataPrimeiraSolicitacao = convertDateToMySQL(
+        pacienteData.Data_Primeira_Solicitacao || new Date().toISOString().split('T')[0]
+    );
+    
+    if (!dataNascimento) {
+        throw new Error('Data de nascimento inválida');
+    }
+    
+    if (!dataPrimeiraSolicitacao) {
+        throw new Error('Data da primeira solicitação inválida');
+    }
+    
+    console.log('🔧 Datas convertidas:', {
+        dataNascimento,
+        dataPrimeiraSolicitacao
+    });
+    
     const insertQuery = `
-      INSERT INTO Pacientes_Clinica (
+        INSERT INTO Pacientes_Clinica (
         clinica_id, Paciente_Nome, Operadora, Prestador, Codigo, 
         Data_Nascimento, Sexo, Cid_Diagnostico, Data_Primeira_Solicitacao,
         cpf, rg, telefone, endereco, email, nome_responsavel, 
         telefone_responsavel, plano_saude, numero_carteirinha, 
         status, observacoes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     
     const values = [
-      pacienteData.clinica_id,
-      pacienteData.Paciente_Nome,
-      pacienteData.Operadora,
-      pacienteData.Prestador,
-      pacienteData.Codigo,
-      pacienteData.Data_Nascimento,
-      pacienteData.Sexo,
-      pacienteData.Cid_Diagnostico,
-      pacienteData.Data_Primeira_Solicitacao,
-      pacienteData.cpf || null,
-      pacienteData.rg || null,
-      pacienteData.telefone || null,
-      pacienteData.endereco || null,
-      pacienteData.email || null,
-      pacienteData.nome_responsavel || null,
-      pacienteData.telefone_responsavel || null,
-      pacienteData.plano_saude || null,
-      pacienteData.numero_carteirinha || null,
-      pacienteData.status || 'ativo',
-      pacienteData.observacoes || null
+        pacienteData.clinica_id || 1, // Valor padrão se não fornecido
+        pacienteData.Paciente_Nome,
+        pacienteData.Operadora || 1, // Valor padrão se não fornecido
+        pacienteData.Prestador || 1, // Valor padrão se não fornecido
+        pacienteData.Codigo,
+        dataNascimento, // Data já convertida
+        pacienteData.Sexo,
+        pacienteData.Cid_Diagnostico,
+        dataPrimeiraSolicitacao, // Data já convertida
+        pacienteData.cpf || null,
+        pacienteData.rg || null,
+        pacienteData.telefone || null,
+        pacienteData.endereco || null,
+        pacienteData.email || null,
+        pacienteData.nome_responsavel || null,
+        pacienteData.telefone_responsavel || null,
+        pacienteData.plano_saude || null,
+        pacienteData.numero_carteirinha || null,
+        pacienteData.status || 'ativo',
+        pacienteData.observacoes || null
     ];
     
+    console.log('🔧 Valores finais para inserção:', values);
+    
     try {
-      const result = await query(insertQuery, values);
-      const insertId = result.insertId;
-      
-      // Buscar o paciente recém-criado
-      const newPaciente = await this.findById(insertId);
-      if (!newPaciente) {
+        const result = await query(insertQuery, values);
+        const insertId = result.insertId;
+        
+        console.log('✅ Paciente criado com ID:', insertId);
+        
+        // Buscar o paciente recém-criado
+        const newPaciente = await this.findById(insertId);
+        if (!newPaciente) {
         throw new Error('Erro ao buscar paciente recém-criado');
-      }
-      
-      return newPaciente;
+        }
+        
+        return newPaciente;
     } catch (error) {
-      console.error('Erro ao criar paciente:', error);
-      throw new Error('Erro ao criar paciente');
+        console.error('❌ Erro ao criar paciente:', error);
+        throw new Error('Erro ao criar paciente');
     }
-  }
+    }
   
   // Atualizar paciente
   static async update(id: number, pacienteData: PacienteUpdateInput): Promise<Paciente | null> {
