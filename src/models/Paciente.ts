@@ -1,4 +1,4 @@
-import { query } from '../config/database';
+import { query, queryWithLimit } from '../config/database';
 import { Paciente, PacienteCreateInput, PacienteUpdateInput, PaginationParams, PaginatedResponse } from '../types';
 
 export class PacienteModel {
@@ -9,21 +9,16 @@ export class PacienteModel {
     const offset = (page - 1) * limit;
     
     let whereClause = '';
-    let queryParams: any[] = [];
-    let countParams: any[] = [];
+    let searchParams: any[] = [];
     
     if (search && search.trim() !== '') {
       whereClause = `WHERE p.Paciente_Nome LIKE ? OR p.Codigo LIKE ? OR p.cpf LIKE ?`;
       const searchTerm = `%${search.trim()}%`;
-      queryParams = [searchTerm, searchTerm, searchTerm];
-      countParams = [searchTerm, searchTerm, searchTerm];
+      searchParams = [searchTerm, searchTerm, searchTerm];
     }
     
-    // Adicionar LIMIT e OFFSET aos parâmetros
-    queryParams.push(limit, offset);
-    
-    // Query para buscar pacientes com informações das operadoras e prestadores
-    const selectQuery = `
+    // Query base para buscar pacientes (sem LIMIT/OFFSET)
+    const baseSelectQuery = `
       SELECT 
         p.*,
         o.nome as operadora_nome,
@@ -33,7 +28,6 @@ export class PacienteModel {
       LEFT JOIN Prestadores pr ON p.Prestador = pr.id
       ${whereClause}
       ORDER BY p.created_at DESC
-      LIMIT ? OFFSET ?
     `;
     
     // Query para contar total de registros
@@ -44,32 +38,33 @@ export class PacienteModel {
     `;
     
     try {
-      console.log('Executando query SELECT com parâmetros:', queryParams);
-      console.log('Executando query COUNT com parâmetros:', countParams);
+      console.log('Executando queries...');
+      console.log('Base query:', baseSelectQuery);
+      console.log('Parâmetros de busca:', searchParams);
+      console.log('Limit:', limit, 'Offset:', offset);
       
-      const [patients, countResult] = await Promise.all([
-        query(selectQuery, queryParams),
-        query(countQuery, countParams)
-      ]);
+      // Executar contagem
+      const countResult = await query(countQuery, searchParams);
+      
+      // Executar busca com limit usando função especial
+      const patients = await queryWithLimit(baseSelectQuery, searchParams, limit, offset);
       
       const total = countResult[0]?.total || 0;
       const totalPages = Math.ceil(total / limit);
       
-      console.log(`Encontrados ${patients.length} pacientes de um total de ${total}`);
+      console.log(`✅ Sucesso! ${patients.length} pacientes encontrados de um total de ${total}`);
       
       return {
         data: patients,
         pagination: {
-          page,
-          limit,
+          page: Number(page),
+          limit: Number(limit),
           total,
           totalPages
         }
       };
     } catch (error) {
-      console.error('Erro ao buscar pacientes:', error);
-      console.error('Query:', selectQuery);
-      console.error('Parâmetros:', queryParams);
+      console.error('❌ Erro detalhado ao buscar pacientes:', error);
       throw new Error('Erro ao buscar pacientes');
     }
   }
@@ -102,20 +97,16 @@ export class PacienteModel {
     const offset = (page - 1) * limit;
     
     let whereClause = `WHERE p.clinica_id = ?`;
-    let queryParams: any[] = [clinicaId];
-    let countParams: any[] = [clinicaId];
+    let searchParams: any[] = [clinicaId];
     
     if (search && search.trim() !== '') {
       whereClause += ` AND (p.Paciente_Nome LIKE ? OR p.Codigo LIKE ? OR p.cpf LIKE ?)`;
       const searchTerm = `%${search.trim()}%`;
-      queryParams.push(searchTerm, searchTerm, searchTerm);
-      countParams.push(searchTerm, searchTerm, searchTerm);
+      searchParams.push(searchTerm, searchTerm, searchTerm);
     }
     
-    // Adicionar LIMIT e OFFSET aos parâmetros
-    queryParams.push(limit, offset);
-    
-    const selectQuery = `
+    // Query base para buscar pacientes (sem LIMIT/OFFSET)
+    const baseSelectQuery = `
       SELECT 
         p.*,
         o.nome as operadora_nome,
@@ -125,7 +116,6 @@ export class PacienteModel {
       LEFT JOIN Prestadores pr ON p.Prestador = pr.id
       ${whereClause}
       ORDER BY p.created_at DESC
-      LIMIT ? OFFSET ?
     `;
     
     const countQuery = `
@@ -135,12 +125,13 @@ export class PacienteModel {
     `;
     
     try {
-      console.log('Executando query da clínica com parâmetros:', queryParams);
+      console.log('Executando queries da clínica...');
       
-      const [patients, countResult] = await Promise.all([
-        query(selectQuery, queryParams),
-        query(countQuery, countParams)
-      ]);
+      // Executar contagem
+      const countResult = await query(countQuery, searchParams);
+      
+      // Executar busca com limit usando função especial
+      const patients = await queryWithLimit(baseSelectQuery, searchParams, limit, offset);
       
       const total = countResult[0]?.total || 0;
       const totalPages = Math.ceil(total / limit);
@@ -148,8 +139,8 @@ export class PacienteModel {
       return {
         data: patients,
         pagination: {
-          page,
-          limit,
+          page: Number(page),
+          limit: Number(limit),
           total,
           totalPages
         }
