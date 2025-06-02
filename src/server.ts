@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { testConnection } from './config/database';
 import pacienteRoutes from './routes/pacienteRoutes';
+import solicitacaoRoutes from './routes/solicitacaoRoutes';
 import { optionalAuth } from './middleware/auth';
 
 // Carregar variáveis de ambiente
@@ -39,6 +40,7 @@ app.get('/health', (req, res) => {
 
 // Rotas da API
 app.use('/api/pacientes', optionalAuth, pacienteRoutes);
+app.use('/api/solicitacoes', optionalAuth, solicitacaoRoutes);
 
 // Rota de teste para verificar conexão com banco
 app.get('/api/test-db', async (req, res) => {
