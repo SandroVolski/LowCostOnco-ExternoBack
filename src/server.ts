@@ -20,8 +20,9 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Aumentar limite para uploads de arquivos maiores (PDFs)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Middleware de log para debug
 app.use((req, res, next) => {
@@ -34,13 +35,14 @@ app.get('/health', (req, res) => {
   res.json({
     success: true,
     message: 'Servidor funcionando',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    version: '1.0.0'
   });
 });
 
 // Rotas da API
 app.use('/api/pacientes', optionalAuth, pacienteRoutes);
-app.use('/api/solicitacoes', optionalAuth, solicitacaoRoutes);
+app.use('/api/solicitacoes', optionalAuth, solicitacaoRoutes); // ✅ NOVA ROTA ADICIONADA
 
 // Rota de teste para verificar conexão com banco
 app.get('/api/test-db', async (req, res) => {
@@ -59,6 +61,22 @@ app.get('/api/test-db', async (req, res) => {
   }
 });
 
+// Rota adicional para informações da API
+app.get('/api', (req, res) => {
+  res.json({
+    success: true,
+    message: 'API do Sistema de Clínicas Oncológicas',
+    version: '1.0.0',
+    endpoints: {
+      pacientes: '/api/pacientes',
+      solicitacoes: '/api/solicitacoes',
+      health: '/health',
+      testDb: '/api/test-db'
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Middleware de tratamento de erros
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Erro não tratado:', err.stack);
@@ -73,7 +91,8 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 app.use('*', (req, res) => {
   res.status(404).json({
     success: false,
-    message: 'Rota não encontrada'
+    message: 'Rota não encontrada',
+    path: req.originalUrl
   });
 });
 
@@ -85,15 +104,33 @@ const startServer = async () => {
     
     if (!isDbConnected) {
       console.error('❌ Não foi possível conectar ao banco de dados');
-      process.exit(1);
+      console.log('⚠️  Continuando sem banco (modo desenvolvimento)...');
     }
     
     app.listen(PORT, () => {
-      console.log(`🚀 Servidor rodando na porta ${PORT}`);
+      console.log('\n🚀 Servidor iniciado com sucesso!');
       console.log(`📡 API disponível em: http://localhost:${PORT}`);
       console.log(`🏥 Health check: http://localhost:${PORT}/health`);
       console.log(`🔧 Test DB: http://localhost:${PORT}/api/test-db`);
       console.log(`👤 Pacientes API: http://localhost:${PORT}/api/pacientes`);
+      console.log(`📋 Solicitações API: http://localhost:${PORT}/api/solicitacoes`);
+      console.log(`🗄️  Database: ${isDbConnected ? '✅ Conectado' : '❌ Desconectado'}`);
+      console.log('\n📚 Endpoints disponíveis:');
+      console.log('   GET    /health');
+      console.log('   GET    /api');
+      console.log('   GET    /api/test-db');
+      console.log('   GET    /api/pacientes');
+      console.log('   POST   /api/pacientes');
+      console.log('   GET    /api/pacientes/:id');
+      console.log('   PUT    /api/pacientes/:id');
+      console.log('   DELETE /api/pacientes/:id');
+      console.log('   GET    /api/solicitacoes');
+      console.log('   POST   /api/solicitacoes');
+      console.log('   GET    /api/solicitacoes/:id');
+      console.log('   GET    /api/solicitacoes/:id/pdf');
+      console.log('   PUT    /api/solicitacoes/:id/status');
+      console.log('   DELETE /api/solicitacoes/:id');
+      console.log('\n🎯 Pronto para receber requisições!\n');
     });
     
   } catch (error) {
@@ -110,6 +147,17 @@ process.on('unhandledRejection', (reason, promise) => {
 process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception:', error);
   process.exit(1);
+});
+
+// Graceful shutdown
+process.on('SIGINT', () => {
+  console.log('\n🛑 Recebido SIGINT. Encerrando servidor graciosamente...');
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.log('\n🛑 Recebido SIGTERM. Encerrando servidor graciosamente...');
+  process.exit(0);
 });
 
 // Iniciar o servidor

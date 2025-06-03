@@ -7,7 +7,9 @@ const router = Router();
 
 // Rotas para solicitações de autorização
 router.post('/', SolicitacaoController.create);                                    // POST /api/solicitacoes
+router.get('/', SolicitacaoController.index);                                      // GET /api/solicitacoes
 router.get('/:id', SolicitacaoController.show);                                    // GET /api/solicitacoes/:id
+router.get('/:id/pdf', SolicitacaoController.generatePDF);                         // GET /api/solicitacoes/:id/pdf - NOVA ROTA
 router.get('/clinica/:clinicaId', SolicitacaoController.getByClinica);             // GET /api/solicitacoes/clinica/:clinicaId
 router.put('/:id/status', SolicitacaoController.updateStatus);                     // PUT /api/solicitacoes/:id/status
 router.delete('/:id', SolicitacaoController.destroy);                              // DELETE /api/solicitacoes/:id

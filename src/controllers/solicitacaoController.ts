@@ -4,6 +4,7 @@ import { Request, Response } from 'express';
 import { SolicitacaoAutorizacaoModel } from '../models/SolicitacaoAutorizacao';
 import { SolicitacaoCreateInput, SolicitacaoUpdateInput } from '../types/solicitacao';
 import { ApiResponse } from '../types';
+import { generateAuthorizationPDF } from '../utils/pdfGenerator';
 
 export class SolicitacaoController {
   
@@ -132,6 +133,53 @@ export class SolicitacaoController {
     }
   }
   
+  // GET /api/solicitacoes/:id/pdf - Gerar PDF da solicitação
+  static async generatePDF(req: Request, res: Response): Promise<void> {
+    try {
+      const id = parseInt(req.params.id);
+      
+      if (isNaN(id)) {
+        const response: ApiResponse = {
+          success: false,
+          message: 'ID inválido'
+        };
+        res.status(400).json(response);
+        return;
+      }
+      
+      const solicitacao = await SolicitacaoAutorizacaoModel.findById(id);
+      
+      if (!solicitacao) {
+        const response: ApiResponse = {
+          success: false,
+          message: 'Solicitação não encontrada'
+        };
+        res.status(404).json(response);
+        return;
+      }
+      
+      // Gerar o PDF
+      const pdfBuffer = await generateAuthorizationPDF(solicitacao);
+      
+      // Configurar headers para download
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="solicitacao_${id}.pdf"`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+      
+      // Enviar o PDF
+      res.send(pdfBuffer);
+      
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+      const response: ApiResponse = {
+        success: false,
+        message: 'Erro ao gerar PDF',
+        error: error instanceof Error ? error.message : 'Erro desconhecido'
+      };
+      res.status(500).json(response);
+    }
+  }
+  
   // PUT /api/solicitacoes/:id/status - Atualizar status da solicitação
   static async updateStatus(req: Request, res: Response): Promise<void> {
     try {
@@ -244,6 +292,40 @@ export class SolicitacaoController {
       const response: ApiResponse = {
         success: false,
         message: 'Erro ao buscar solicitações por status',
+        error: error instanceof Error ? error.message : 'Erro desconhecido'
+      };
+      res.status(500).json(response);
+    }
+  }
+
+  // GET /api/solicitacoes - Listar todas as solicitações
+  static async index(req: Request, res: Response): Promise<void> {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 10;
+      const clinicaId = req.query.clinica_id ? parseInt(req.query.clinica_id as string) : null;
+      
+      let result;
+      
+      if (clinicaId) {
+        result = await SolicitacaoAutorizacaoModel.findByClinicaId(clinicaId, { page, limit });
+      } else {
+        // Implementar método para listar todas se necessário
+        result = await SolicitacaoAutorizacaoModel.findByClinicaId(1, { page, limit }); // Temporário
+      }
+      
+      const response: ApiResponse = {
+        success: true,
+        message: 'Solicitações encontradas com sucesso',
+        data: result
+      };
+      
+      res.json(response);
+    } catch (error) {
+      console.error('Erro ao listar solicitações:', error);
+      const response: ApiResponse = {
+        success: false,
+        message: 'Erro ao listar solicitações',
         error: error instanceof Error ? error.message : 'Erro desconhecido'
       };
       res.status(500).json(response);

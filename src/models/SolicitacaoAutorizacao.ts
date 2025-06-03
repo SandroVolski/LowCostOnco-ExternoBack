@@ -1,4 +1,4 @@
-// src/models/SolicitacaoAutorizacao.ts
+// src/models/SolicitacaoAutorizacao.ts - VERSÃO CORRIGIDA
 
 import { query } from '../config/database';
 import { SolicitacaoAutorizacao, SolicitacaoCreateInput, SolicitacaoUpdateInput } from '../types/solicitacao';
@@ -104,7 +104,7 @@ export class SolicitacaoAutorizacaoModel {
     }
   }
   
-  // Listar solicitações por clínica
+  // ✅ MÉTODO CORRIGIDO - Listar solicitações por clínica
   static async findByClinicaId(clinicaId: number, params: { page?: number; limit?: number } = {}): Promise<{
     data: SolicitacaoAutorizacao[];
     pagination: {
@@ -117,6 +117,11 @@ export class SolicitacaoAutorizacaoModel {
     const { page = 1, limit = 10 } = params;
     const offset = (page - 1) * limit;
     
+    // ✅ CORREÇÃO: Validar e garantir que limit e offset sejam números inteiros
+    const safeLimit = Math.max(1, Math.min(100, Math.floor(Number(limit))));
+    const safeOffset = Math.max(0, Math.floor(Number(offset)));
+    
+    // ✅ CORREÇÃO: Construir query com LIMIT/OFFSET direto na string (não como parâmetros)
     const selectQuery = `
       SELECT s.*, c.nome as clinica_nome, p.Paciente_Nome as paciente_nome
       FROM Solicitacoes_Autorizacao s
@@ -124,7 +129,7 @@ export class SolicitacaoAutorizacaoModel {
       LEFT JOIN Pacientes_Clinica p ON s.paciente_id = p.id
       WHERE s.clinica_id = ?
       ORDER BY s.created_at DESC
-      LIMIT ? OFFSET ?
+      LIMIT ${safeLimit} OFFSET ${safeOffset}
     `;
     
     const countQuery = `
@@ -134,26 +139,93 @@ export class SolicitacaoAutorizacaoModel {
     `;
     
     try {
+      console.log('🔧 Executando queries da clínica...');
+      console.log('Query de busca:', selectQuery);
+      console.log('Parâmetros:', [clinicaId]);
+      
       // Executar contagem
       const countResult = await query(countQuery, [clinicaId]);
       
-      // Executar busca
-      const solicitacoes = await query(selectQuery, [clinicaId, limit, offset]);
+      // ✅ CORREÇÃO: Executar busca apenas com clinicaId como parâmetro
+      const solicitacoes = await query(selectQuery, [clinicaId]);
       
       const total = countResult[0]?.total || 0;
-      const totalPages = Math.ceil(total / limit);
+      const totalPages = Math.ceil(total / safeLimit);
+      
+      console.log(`✅ Sucesso! ${solicitacoes.length} solicitações encontradas de um total de ${total}`);
       
       return {
         data: solicitacoes,
         pagination: {
           page: Number(page),
-          limit: Number(limit),
+          limit: Number(safeLimit),
           total,
           totalPages
         }
       };
     } catch (error) {
-      console.error('Erro ao buscar solicitações da clínica:', error);
+      console.error('❌ Erro ao buscar solicitações da clínica:', error);
+      throw new Error('Erro ao buscar solicitações');
+    }
+  }
+  
+  // ✅ NOVO MÉTODO - Listar todas as solicitações (para o endpoint geral)
+  static async findAll(params: { page?: number; limit?: number } = {}): Promise<{
+    data: SolicitacaoAutorizacao[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+    };
+  }> {
+    const { page = 1, limit = 10 } = params;
+    const offset = (page - 1) * limit;
+    
+    // Validar e garantir que limit e offset sejam números inteiros
+    const safeLimit = Math.max(1, Math.min(100, Math.floor(Number(limit))));
+    const safeOffset = Math.max(0, Math.floor(Number(offset)));
+    
+    // Construir query com LIMIT/OFFSET direto na string
+    const selectQuery = `
+      SELECT s.*, c.nome as clinica_nome, p.Paciente_Nome as paciente_nome
+      FROM Solicitacoes_Autorizacao s
+      LEFT JOIN Clinicas c ON s.clinica_id = c.id
+      LEFT JOIN Pacientes_Clinica p ON s.paciente_id = p.id
+      ORDER BY s.created_at DESC
+      LIMIT ${safeLimit} OFFSET ${safeOffset}
+    `;
+    
+    const countQuery = `
+      SELECT COUNT(*) as total 
+      FROM Solicitacoes_Autorizacao
+    `;
+    
+    try {
+      console.log('🔧 Executando queries gerais...');
+      
+      // Executar contagem
+      const countResult = await query(countQuery, []);
+      
+      // Executar busca
+      const solicitacoes = await query(selectQuery, []);
+      
+      const total = countResult[0]?.total || 0;
+      const totalPages = Math.ceil(total / safeLimit);
+      
+      console.log(`✅ Sucesso! ${solicitacoes.length} solicitações encontradas de um total de ${total}`);
+      
+      return {
+        data: solicitacoes,
+        pagination: {
+          page: Number(page),
+          limit: Number(safeLimit),
+          total,
+          totalPages
+        }
+      };
+    } catch (error) {
+      console.error('❌ Erro ao buscar todas as solicitações:', error);
       throw new Error('Erro ao buscar solicitações');
     }
   }
