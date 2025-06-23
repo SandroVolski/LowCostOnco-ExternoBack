@@ -1,7 +1,8 @@
-// src/controllers/solicitacaoController.ts
+// src/controllers/solicitacaoController.ts - ATUALIZADO COM LOGO
 
 import { Request, Response } from 'express';
 import { SolicitacaoAutorizacaoModel } from '../models/SolicitacaoAutorizacao';
+import { ClinicaModel } from '../models/Clinica';
 import { SolicitacaoCreateInput, SolicitacaoUpdateInput } from '../types/solicitacao';
 import { ApiResponse } from '../types';
 import { generateAuthorizationPDF } from '../utils/pdfGenerator';
@@ -133,7 +134,7 @@ export class SolicitacaoController {
     }
   }
   
-  // GET /api/solicitacoes/:id/pdf - Gerar PDF da solicitação
+  // ✅ GET /api/solicitacoes/:id/pdf - Gerar PDF com logo da clínica
   static async generatePDF(req: Request, res: Response): Promise<void> {
     try {
       const id = parseInt(req.params.id);
@@ -147,6 +148,9 @@ export class SolicitacaoController {
         return;
       }
       
+      console.log('🔧 Iniciando geração de PDF para solicitação:', id);
+      
+      // Buscar a solicitação
       const solicitacao = await SolicitacaoAutorizacaoModel.findById(id);
       
       if (!solicitacao) {
@@ -158,19 +162,48 @@ export class SolicitacaoController {
         return;
       }
       
-      // Gerar o PDF
-      const pdfBuffer = await generateAuthorizationPDF(solicitacao);
+      console.log('✅ Solicitação encontrada:', {
+        id: solicitacao.id,
+        clinica_id: solicitacao.clinica_id,
+        cliente: solicitacao.cliente_nome
+      });
+      
+      // ✅ BUSCAR DADOS DA CLÍNICA E LOGO
+      let clinicLogo = '';
+      try {
+        console.log('🔧 Buscando dados da clínica ID:', solicitacao.clinica_id);
+        const clinicProfile = await ClinicaModel.findById(solicitacao.clinica_id);
+        
+        if (clinicProfile?.clinica?.logo_url) {
+          clinicLogo = clinicProfile.clinica.logo_url;
+          console.log('✅ Logo da clínica encontrada:', clinicLogo.substring(0, 50) + '...');
+        } else {
+          console.log('⚠️  Logo da clínica não encontrada');
+        }
+      } catch (logoError) {
+        console.warn('⚠️  Erro ao buscar logo da clínica:', logoError);
+        // Continua sem a logo
+      }
+      
+      // ✅ GERAR O PDF COM LOGO
+      console.log('🎨 Gerando PDF moderno...');
+      const pdfBuffer = await generateAuthorizationPDF(solicitacao, clinicLogo);
       
       // Configurar headers para download
+      const fileName = `autorizacao_tratamento_${id}_${new Date().toISOString().split('T')[0]}.pdf`;
+      
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="solicitacao_${id}.pdf"`);
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
       res.setHeader('Content-Length', pdfBuffer.length);
+      res.setHeader('Cache-Control', 'no-cache');
       
       // Enviar o PDF
       res.send(pdfBuffer);
       
+      console.log('✅ PDF enviado com sucesso! Tamanho:', (pdfBuffer.length / 1024).toFixed(2), 'KB');
+      
     } catch (error) {
-      console.error('Erro ao gerar PDF:', error);
+      console.error('❌ Erro ao gerar PDF:', error);
       const response: ApiResponse = {
         success: false,
         message: 'Erro ao gerar PDF',
