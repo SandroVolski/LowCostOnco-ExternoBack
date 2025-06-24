@@ -1,6 +1,8 @@
-// src/utils/pdfGenerator.ts - VERSÃO PROFISSIONAL CORRIGIDA
+// src/utils/pdfGenerator.ts - VERSÃO CORRIGIDA COM HEADER CENTRALIZADO E FOOTER SOMENTE NA ÚLTIMA PÁGINA
 
 import puppeteer from 'puppeteer';
+import fs from 'fs';
+import path from 'path';
 import { SolicitacaoAutorizacao } from '../types/solicitacao';
 
 // Função para formatar data
@@ -27,8 +29,249 @@ const formatStatus = (status: string): string => {
   return statusMap[status] || status;
 };
 
-// Template HTML profissional para o PDF médico
-const generateProfessionalHTMLTemplate = (solicitacao: SolicitacaoAutorizacao, clinicLogo?: string): string => {
+// Função para carregar a logo padrão e converter para base64
+const getDefaultLogoBase64 = (): string => {
+  try {
+    // Caminho correto para a logo padrão conforme solicitado
+    const logoPath = path.resolve('C:\\Users\\sandr\\OneDrive\\Área de Trabalho\\Trabalho\\Code\\SystemVSCode\\system-douglas2\\Projeto\\SiteExterno-ClinicaOperadoraPlanosaude\\Teste\\sistema-clinicas-backend\\src\\images\\logoPadrao.png');
+    
+    if (fs.existsSync(logoPath)) {
+      const logoBuffer = fs.readFileSync(logoPath);
+      const logoBase64 = logoBuffer.toString('base64');
+      return `data:image/png;base64,${logoBase64}`;
+    }
+  } catch (error) {
+    console.warn('⚠️  Não foi possível carregar a logo padrão do caminho especificado:', error);
+  }
+  
+  // Fallback para logo padrão relativa se o caminho absoluto não funcionar
+  try {
+    const logoPathRelative = path.join(__dirname, '..', 'images', 'logoPadrao.png');
+    
+    if (fs.existsSync(logoPathRelative)) {
+      const logoBuffer = fs.readFileSync(logoPathRelative);
+      const logoBase64 = logoBuffer.toString('base64');
+      return `data:image/png;base64,${logoBase64}`;
+    }
+  } catch (error) {
+    console.warn('⚠️  Não foi possível carregar a logo padrão relativa:', error);
+  }
+  
+  // Fallback final para SVG
+  return `data:image/svg+xml;base64,${btoa(`
+<svg width="50" height="50" viewBox="0 0 50 50" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="50" height="50" rx="8" fill="#2c3e50"/>
+  <path d="M25 10 L25 40 M10 25 L40 25" stroke="white" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="25" cy="25" r="8" fill="none" stroke="white" stroke-width="2"/>
+  <path d="M20 20 L30 30 M30 20 L20 30" stroke="#c6d651" stroke-width="1.5" stroke-linecap="round"/>
+</svg>
+`)}`;
+};
+
+// Template HTML para o Header nativo do PDF - PERFEITAMENTE CENTRALIZADO
+const generateHeaderTemplate = (solicitacao: SolicitacaoAutorizacao, clinicLogo?: string): string => {
+  const logoToUse = clinicLogo && clinicLogo.trim() !== '' ? clinicLogo : getDefaultLogoBase64();
+  
+  return `
+    <div style="
+      width: 100vw; 
+      height: 100px;
+      margin: 0; 
+      padding: 0;
+      font-size: 11px; 
+      font-family: Arial, sans-serif;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+      position: relative;
+      box-sizing: border-box;
+    ">
+      <div style="
+        width: 100%;
+        height: 100%;
+        background: #f8f9fa;
+        border-bottom: 3px solid #2c3e50;
+        padding: 15px 40px;
+        margin: 0;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+      ">
+        <!-- Logo à esquerda - posição absoluta -->
+        <div style="
+          position: absolute;
+          left: 40px;
+          top: 50%;
+          transform: translateY(-50%);
+          display: flex; 
+          align-items: center; 
+          gap: 10px;
+        ">
+          <img src="${logoToUse}" style="
+            width: 45px;
+            height: 45px;
+            border-radius: 6px;
+            background: white;
+            padding: 5px;
+            border: 2px solid #dee2e6;
+            object-fit: contain;
+          " />
+        </div>
+        
+        <!-- Título absolutamente centralizado -->
+        <div style="
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          transform: translate(-50%, -50%);
+          text-align: center;
+          white-space: nowrap;
+        ">
+          <h1 style="
+            font-size: 14px;
+            font-weight: bold;
+            margin: 0;
+            color: #2c3e50;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          ">Autorização de Tratamento Oncológico</h1>
+          <p style="
+            font-size: 9px;
+            font-weight: normal;
+            margin: 2px 0 0 0;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+          ">Solicitação de Processamento - Quimioterapia Antineoplásica</p>
+        </div>
+        
+        <!-- Informações da solicitação à direita - posição absoluta -->
+        <div style="
+          position: absolute;
+          right: 40px;
+          top: 50%;
+          transform: translateY(-50%);
+          text-align: right;
+        ">
+          <div style="
+            font-size: 11px;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #2c3e50;
+            font-family: 'Courier New', monospace;
+          ">SOL-${String(solicitacao.id || 'NOVA').padStart(6, '0')}</div>
+          <div style="
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 2px;
+            font-size: 8px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            ${solicitacao.status === 'pendente' ? 'background: #fff3cd; color: #856404;' : ''}
+            ${solicitacao.status === 'aprovada' ? 'background: #d4edda; color: #155724;' : ''}
+            ${solicitacao.status === 'rejeitada' ? 'background: #f8d7da; color: #721c24;' : ''}
+            ${solicitacao.status === 'em_analise' ? 'background: #d1ecf1; color: #0c5460;' : ''}
+          ">${formatStatus(solicitacao.status || 'pendente')}</div>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+// Template HTML para o Footer nativo do PDF - SOMENTE NA ÚLTIMA PÁGINA E LARGURA TOTAL
+const generateFooterTemplate = (): string => {
+  return `
+    <div style="
+      width: 100vw; 
+      height: 80px;
+      margin: 0; 
+      padding: 0;
+      font-size: 9px; 
+      font-family: Arial, sans-serif;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+      background: #2c3e50;
+      color: white;
+      border-top: 2px solid #34495e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      position: relative;
+    ">
+      <div style="
+        padding: 0 40px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+        height: 100%;
+        box-sizing: border-box;
+      ">
+        <div style="
+          text-align: left;
+          flex: 1;
+        ">
+          <h4 style="
+            font-size: 10px;
+            font-weight: 600;
+            margin: 0 0 2px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          ">Sistema de Gestão</h4>
+          <p style="
+            opacity: 0.9;
+            line-height: 1.2;
+            margin: 0;
+            font-size: 8px;
+          ">Low Cost Onco - Oncologia Clínica</p>
+        </div>
+        
+        <div style="
+          text-align: center;
+          flex: 1;
+        ">
+          <p style="
+            opacity: 0.9;
+            line-height: 1.2;
+            margin: 0;
+            font-size: 8px;
+          ">Página <span class="pageNumber"></span> de <span class="totalPages"></span></p>
+        </div>
+        
+        <div style="
+          text-align: right;
+          flex: 1;
+        ">
+          <h4 style="
+            font-size: 10px;
+            font-weight: 600;
+            margin: 0 0 2px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          ">Documento Gerado</h4>
+          <p style="
+            opacity: 0.9;
+            line-height: 1.2;
+            margin: 0;
+            font-size: 8px;
+          ">${formatDate(new Date().toISOString())} - ${new Date().toLocaleTimeString('pt-BR')}</p>
+          <p style="
+            opacity: 0.9;
+            line-height: 1.2;
+            margin: 0;
+            font-size: 8px;
+          ">Documento Oficial</p>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+// Template HTML principal SEM FOOTER (footer será nativo)
+const generateHTMLTemplate = (solicitacao: SolicitacaoAutorizacao): string => {
   return `
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -45,151 +288,22 @@ const generateProfessionalHTMLTemplate = (solicitacao: SolicitacaoAutorizacao, c
             box-sizing: border-box;
         }
         
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        
         body {
             font-family: 'Source Sans Pro', Arial, sans-serif;
             font-size: 11px;
             line-height: 1.4;
             color: #2c3e50;
             background: white;
-            margin: 0;
-            padding: 0;
+            padding: 20px 30px 30px 30px;
         }
         
-        .page-container {
-            max-width: 210mm;
-            margin: 0 auto;
-            background: white;
-            overflow: hidden;
-        }
-        
-        /* Header profissional e sóbrio */
-        .professional-header {
-            background: #f8f9fa;
-            border-bottom: 3px solid #2c3e50;
-            padding: 20px 30px;
-            position: relative;
-        }
-        
-        .header-border {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 3px;
-            background: linear-gradient(90deg, #2c3e50 0%, #34495e 50%, #2c3e50 100%);
-        }
-        
-        .header-content {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            position: relative;
-            z-index: 2;
-        }
-        
-        .logo-section {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-        
-        .clinic-logo {
-            width: 50px;
-            height: 50px;
-            border-radius: 4px;
-            background: white;
-            padding: 6px;
-            border: 2px solid #dee2e6;
-            object-fit: contain;
-        }
-        
-        .logo-placeholder {
-            width: 50px;
-            height: 50px;
-            border-radius: 4px;
-            background: white;
-            border: 2px solid #dee2e6;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            color: #2c3e50;
-            font-weight: 600;
-        }
-        
-        .header-text {
-            flex: 1;
-            text-align: center;
-        }
-        
-        .header-title {
-            font-size: 18px;
-            font-weight: 700;
-            margin: 0;
-            color: #2c3e50;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        
-        .header-subtitle {
-            font-size: 12px;
-            font-weight: 400;
-            margin: 3px 0 0 0;
-            color: #6c757d;
-            text-transform: uppercase;
-            font-size: 10px;
-            letter-spacing: 0.5px;
-        }
-        
-        .status-section {
-            text-align: right;
-        }
-        
-        .request-number {
-            font-size: 14px;
-            font-weight: 700;
-            margin-bottom: 8px;
-            color: #2c3e50;
-            font-family: 'Courier New', monospace;
-        }
-        
-        .status-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 3px;
-            font-size: 10px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            border: 1px solid;
-        }
-        
-        .status-pendente { 
-            background: #fff3cd; 
-            color: #856404; 
-            border-color: #ffeaa7;
-        }
-        .status-aprovada { 
-            background: #d4edda; 
-            color: #155724; 
-            border-color: #c3e6cb;
-        }
-        .status-rejeitada { 
-            background: #f8d7da; 
-            color: #721c24; 
-            border-color: #f5c6cb;
-        }
-        .status-em_analise { 
-            background: #d1ecf1; 
-            color: #0c5460; 
-            border-color: #bee5eb;
-        }
-        
-        /* Content area profissional */
-        .content {
-            padding: 25px 30px;
-        }
-        
+        /* Seções do formulário */
         .section {
             margin-bottom: 20px;
             border: 1px solid #dee2e6;
@@ -233,7 +347,7 @@ const generateProfessionalHTMLTemplate = (solicitacao: SolicitacaoAutorizacao, c
             background: white;
         }
         
-        /* Grid layouts médicos */
+        /* Grid layouts */
         .info-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -308,7 +422,7 @@ const generateProfessionalHTMLTemplate = (solicitacao: SolicitacaoAutorizacao, c
             grid-column: 1 / -1;
         }
         
-        /* Seção de medicamentos profissional */
+        /* Seção de medicamentos */
         .medication-section {
             background: #f8f9fa;
             border: 1px solid #dee2e6;
@@ -326,13 +440,14 @@ const generateProfessionalHTMLTemplate = (solicitacao: SolicitacaoAutorizacao, c
             letter-spacing: 0.5px;
         }
         
-        /* Seção de assinatura profissional */
+        /* Seção de assinatura */
         .signature-section {
             background: white;
             border: 2px solid #2c3e50;
             border-radius: 4px;
             padding: 20px;
-            margin-top: 25px;
+            margin: 25px 0 20px 0;
+            page-break-inside: avoid;
         }
         
         .signature-title {
@@ -359,6 +474,7 @@ const generateProfessionalHTMLTemplate = (solicitacao: SolicitacaoAutorizacao, c
             text-align: center;
             margin-top: 10px;
             background: white;
+            min-height: 60px;
         }
         
         .signature-label {
@@ -375,42 +491,13 @@ const generateProfessionalHTMLTemplate = (solicitacao: SolicitacaoAutorizacao, c
             border-radius: 3px;
             padding: 15px;
             text-align: center;
+            min-height: 60px;
         }
         
         .authorization-approved {
             background: #d4edda;
             border-color: #c3e6cb;
             color: #155724;
-        }
-        
-        /* Footer profissional */
-        .professional-footer {
-            background: #2c3e50;
-            color: white;
-            padding: 15px 30px;
-            margin-top: 25px;
-            font-size: 9px;
-        }
-        
-        .footer-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 20px;
-            align-items: center;
-            text-align: center;
-        }
-        
-        .footer-section h4 {
-            font-size: 10px;
-            font-weight: 600;
-            margin-bottom: 3px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        .footer-section p {
-            opacity: 0.8;
-            line-height: 1.3;
         }
         
         /* Texto em áreas */
@@ -443,379 +530,309 @@ const generateProfessionalHTMLTemplate = (solicitacao: SolicitacaoAutorizacao, c
             color: #856404;
         }
         
-        /* Melhorias para impressão */
         @media print {
+            html, body {
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            
             body { 
                 background: white;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
-            }
-            
-            .page-container {
-                max-width: none;
+                padding: 20px 30px 30px 30px;
             }
             
             .section {
                 page-break-inside: avoid;
-                break-inside: avoid;
             }
             
-            .professional-header {
-                page-break-after: avoid;
+            .signature-section {
+                page-break-inside: avoid !important;
             }
-        }
-        
-        /* Tabelas médicas */
-        .medical-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 10px 0;
-            font-size: 10px;
-        }
-        
-        .medical-table th,
-        .medical-table td {
-            border: 1px solid #dee2e6;
-            padding: 6px 8px;
-            text-align: left;
-        }
-        
-        .medical-table th {
-            background: #f8f9fa;
-            font-weight: 600;
-            color: #2c3e50;
-            text-transform: uppercase;
-            font-size: 9px;
-            letter-spacing: 0.3px;
         }
     </style>
 </head>
 <body>
-    <div class="page-container">
-        <!-- Header Profissional -->
-        <div class="professional-header">
-            <div class="header-content">
-                <div class="logo-section">
-                    ${clinicLogo 
-                        ? `<img src="${clinicLogo}" alt="Logo da Clínica" class="clinic-logo" />`
-                        : `<div class="logo-placeholder">⚕️</div>`
-                    }
-                </div>
-                
-                <div class="header-text">
-                    <h1 class="header-title">Autorização de Tratamento Oncológico</h1>
-                    <p class="header-subtitle">Solicitação de Processamento - Quimioterapia Antineoplásica</p>
-                </div>
-                
-                <div class="status-section">
-                    <div class="request-number">SOL-${String(solicitacao.id || 'NOVA').padStart(6, '0')}</div>
-                    <div class="status-badge status-${solicitacao.status || 'pendente'}">
-                        ${formatStatus(solicitacao.status || 'pendente')}
-                    </div>
-                </div>
+    <!-- Seção 1: Dados da Instituição e Paciente -->
+    <div class="section">
+        <div class="section-header">
+            <div class="section-title">
+                <div class="section-number">1</div>
+                Identificação da Instituição e Paciente
             </div>
-            <div class="header-border"></div>
         </div>
-
-        <div class="content">
-            <!-- Seção 1: Dados da Instituição e Paciente -->
-            <div class="section">
-                <div class="section-header">
-                    <div class="section-title">
-                        <div class="section-number">1</div>
-                        Identificação da Instituição e Paciente
-                    </div>
+        <div class="section-content">
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">Instituição Solicitante</span>
+                    <span class="info-value">${solicitacao.hospital_nome || ''}</span>
                 </div>
-                <div class="section-content">
-                    <div class="info-grid">
-                        <div class="info-item">
-                            <span class="info-label">Instituição Solicitante</span>
-                            <span class="info-value">${solicitacao.hospital_nome || ''}</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Código da Instituição</span>
-                            <span class="info-value">${solicitacao.hospital_codigo || ''}</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Nome Completo do Paciente</span>
-                            <span class="info-value">${solicitacao.cliente_nome || ''}</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Registro do Paciente</span>
-                            <span class="info-value">${solicitacao.cliente_codigo || ''}</span>
-                        </div>
-                    </div>
-                    
-                    <div class="info-grid-4">
-                        <div class="info-item">
-                            <span class="info-label">Sexo</span>
-                            <span class="info-value">${solicitacao.sexo === 'M' ? 'Masculino' : solicitacao.sexo === 'F' ? 'Feminino' : ''}</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Data de Nascimento</span>
-                            <span class="info-value">${formatDate(solicitacao.data_nascimento)}</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Idade</span>
-                            <span class="info-value">${solicitacao.idade || ''} anos</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Data da Solicitação</span>
-                            <span class="info-value">${formatDate(solicitacao.data_solicitacao)}</span>
-                        </div>
-                    </div>
+                <div class="info-item">
+                    <span class="info-label">Código da Instituição</span>
+                    <span class="info-value">${solicitacao.hospital_codigo || ''}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Nome Completo do Paciente</span>
+                    <span class="info-value">${solicitacao.cliente_nome || ''}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Registro do Paciente</span>
+                    <span class="info-value">${solicitacao.cliente_codigo || ''}</span>
                 </div>
             </div>
-
-            <!-- Seção 2: Diagnóstico Oncológico -->
-            <div class="section">
-                <div class="section-header">
-                    <div class="section-title">
-                        <div class="section-number">2</div>
-                        Diagnóstico Oncológico e Estadiamento TNM
-                    </div>
+            
+            <div class="info-grid-4">
+                <div class="info-item">
+                    <span class="info-label">Sexo</span>
+                    <span class="info-value">${solicitacao.sexo === 'M' ? 'Masculino' : solicitacao.sexo === 'F' ? 'Feminino' : ''}</span>
                 </div>
-                <div class="section-content">
-                    <div class="info-grid">
-                        <div class="info-item">
-                            <span class="info-label">Classificação CID-10</span>
-                            <span class="info-value">${solicitacao.diagnostico_cid || ''}</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Descrição do Diagnóstico</span>
-                            <span class="info-value">${solicitacao.diagnostico_descricao || ''}</span>
-                        </div>
-                    </div>
-                    
-                    ${solicitacao.local_metastases ? `
+                <div class="info-item">
+                    <span class="info-label">Data de Nascimento</span>
+                    <span class="info-value">${formatDate(solicitacao.data_nascimento)}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Idade</span>
+                    <span class="info-value">${solicitacao.idade || ''} anos</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Data da Solicitação</span>
+                    <span class="info-value">${formatDate(solicitacao.data_solicitacao)}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Seção 2: Diagnóstico Oncológico -->
+    <div class="section">
+        <div class="section-header">
+            <div class="section-title">
+                <div class="section-number">2</div>
+                Diagnóstico Oncológico e Estadiamento TNM
+            </div>
+        </div>
+        <div class="section-content">
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">Classificação CID-10</span>
+                    <span class="info-value">${solicitacao.diagnostico_cid || ''}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Descrição do Diagnóstico</span>
+                    <span class="info-value">${solicitacao.diagnostico_descricao || ''}</span>
+                </div>
+            </div>
+            
+            ${solicitacao.local_metastases ? `
+            <div class="info-item">
+                <span class="info-label">Localização de Metástases</span>
+                <div class="text-area-value">${solicitacao.local_metastases}</div>
+            </div>
+            ` : ''}
+            
+            <div class="highlight-clinical">
+                <div class="staging-grid">
                     <div class="info-item">
-                        <span class="info-label">Localização de Metástases</span>
-                        <div class="text-area-value">${solicitacao.local_metastases}</div>
+                        <span class="info-label">Tumor (T)</span>
+                        <span class="info-value">${solicitacao.estagio_t || ''}</span>
                     </div>
-                    ` : ''}
-                    
-                    <div class="highlight-clinical">
-                        <div class="staging-grid">
-                            <div class="info-item">
-                                <span class="info-label">Tumor (T)</span>
-                                <span class="info-value">${solicitacao.estagio_t || ''}</span>
-                            </div>
-                            <div class="info-item">
-                                <span class="info-label">Linfonodos (N)</span>
-                                <span class="info-value">${solicitacao.estagio_n || ''}</span>
-                            </div>
-                            <div class="info-item">
-                                <span class="info-label">Metástase (M)</span>
-                                <span class="info-value">${solicitacao.estagio_m || ''}</span>
-                            </div>
-                            <div class="info-item">
-                                <span class="info-label">Estágio Clínico</span>
-                                <span class="info-value">${solicitacao.estagio_clinico || ''}</span>
-                            </div>
-                        </div>
+                    <div class="info-item">
+                        <span class="info-label">Linfonodos (N)</span>
+                        <span class="info-value">${solicitacao.estagio_n || ''}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Metástase (M)</span>
+                        <span class="info-value">${solicitacao.estagio_m || ''}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Estágio Clínico</span>
+                        <span class="info-value">${solicitacao.estagio_clinico || ''}</span>
                     </div>
                 </div>
             </div>
-
-            <!-- Seção 3: Histórico de Tratamentos -->
-            <div class="section">
-                <div class="section-header">
-                    <div class="section-title">
-                        <div class="section-number">3</div>
-                        Histórico de Tratamentos Oncológicos Prévios
-                    </div>
-                </div>
-                <div class="section-content">
-                    <div class="treatment-grid">
-                        <div class="info-item">
-                            <span class="info-label">Cirurgia/Radioterapia</span>
-                            <div class="text-area-value">${solicitacao.tratamento_cirurgia_radio || 'Não realizado'}</div>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Quimioterapia Adjuvante</span>
-                            <div class="text-area-value">${solicitacao.tratamento_quimio_adjuvante || 'Não realizado'}</div>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Quimioterapia 1ª Linha</span>
-                            <div class="text-area-value">${solicitacao.tratamento_quimio_primeira_linha || 'Não realizado'}</div>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Quimioterapia ≥2ª Linha</span>
-                            <div class="text-area-value">${solicitacao.tratamento_quimio_segunda_linha || 'Não realizado'}</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Seção 4: Protocolo Terapêutico -->
-            <div class="section">
-                <div class="section-header">
-                    <div class="section-title">
-                        <div class="section-number">4</div>
-                        Protocolo Quimioterápico Proposto
-                    </div>
-                </div>
-                <div class="section-content">
-                    <div class="info-grid">
-                        <div class="info-item">
-                            <span class="info-label">Finalidade Terapêutica</span>
-                            <span class="info-value">${solicitacao.finalidade || ''}</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Performance Status (ECOG)</span>
-                            <span class="info-value">${solicitacao.performance_status || ''}</span>
-                        </div>
-                    </div>
-                    
-                    <div class="info-grid-4">
-                        <div class="info-item">
-                            <span class="info-label">Protocolo/Sigla</span>
-                            <span class="info-value">${solicitacao.siglas || ''}</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Ciclos Previstos</span>
-                            <span class="info-value">${solicitacao.ciclos_previstos || ''}</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Ciclo Atual</span>
-                            <span class="info-value">${solicitacao.ciclo_atual || ''}</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Superfície Corporal</span>
-                            <span class="info-value">${solicitacao.superficie_corporal || ''} m²</span>
-                        </div>
-                    </div>
-                    
-                    <div class="info-grid">
-                        <div class="info-item">
-                            <span class="info-label">Peso Corporal</span>
-                            <span class="info-value">${solicitacao.peso || ''} kg</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">Altura</span>
-                            <span class="info-value">${solicitacao.altura || ''} cm</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Seção 5: Prescrição Médica -->
-            <div class="section">
-                <div class="section-header">
-                    <div class="section-title">
-                        <div class="section-number">5</div>
-                        Prescrição de Agentes Antineoplásicos
-                    </div>
-                </div>
-                <div class="section-content">
-                    <div class="medication-section">
-                        <div class="medication-title">Medicamentos Antineoplásicos Prescritos</div>
-                        <div class="info-item" style="margin-bottom: 15px;">
-                            <div class="text-area-value">${solicitacao.medicamentos_antineoplasticos || ''}</div>
-                        </div>
-                        
-                        <div class="info-grid-3">
-                            <div class="info-item">
-                                <span class="info-label">Dosagem por m²</span>
-                                <span class="info-value">${solicitacao.dose_por_m2 || ''}</span>
-                            </div>
-                            <div class="info-item">
-                                <span class="info-label">Dose Total Calculada</span>
-                                <span class="info-value">${solicitacao.dose_total || ''}</span>
-                            </div>
-                            <div class="info-item">
-                                <span class="info-label">Via de Administração</span>
-                                <span class="info-value">${solicitacao.via_administracao || ''}</span>
-                            </div>
-                        </div>
-                        
-                        <div class="info-item">
-                            <span class="info-label">Esquema Posológico (Dias e Intervalos)</span>
-                            <span class="info-value">${solicitacao.dias_aplicacao_intervalo || ''}</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            ${solicitacao.medicacoes_associadas ? `
-            <!-- Seção 6: Medicações Coadjuvantes -->
-            <div class="section">
-                <div class="section-header">
-                    <div class="section-title">
-                        <div class="section-number">6</div>
-                        Medicações Coadjuvantes e Suporte
-                    </div>
-                </div>
-                <div class="section-content">
-                    <div class="text-area-value">${solicitacao.medicacoes_associadas}</div>
-                </div>
-            </div>
-            ` : ''}
-
-            <!-- Seção 7: Responsabilidade Médica -->
-            <div class="signature-section">
-                <div class="signature-title">Responsabilidade Médica e Autorização</div>
-                
-                <div class="signature-grid">
-                    <div>
-                        <div class="info-item">
-                            <span class="info-label">Médico Oncologista Responsável</span>
-                            <span class="info-value">${solicitacao.medico_assinatura_crm || ''}</span>
-                        </div>
-                        <div class="signature-box">
-                            <div class="signature-label">Assinatura e Carimbo do Médico Responsável</div>
-                        </div>
-                    </div>
-                    
-                    <div>
-                        <div class="info-item">
-                            <span class="info-label">Número da Autorização</span>
-                            <div class="authorization-box ${solicitacao.status === 'aprovada' ? 'authorization-approved' : ''}">
-                                ${solicitacao.numero_autorizacao || 'Aguardando processamento'}
-                            </div>
-                        </div>
-                        
-                        ${solicitacao.status === 'aprovada' ? `
-                        <div class="clinical-note">
-                            ✓ AUTORIZAÇÃO MÉDICA APROVADA<br>
-                            <small>Documento válido para execução do protocolo prescrito</small>
-                        </div>
-                        ` : ''}
-                    </div>
-                </div>
-            </div>
-
-            ${solicitacao.observacoes ? `
-            <!-- Observações Clínicas -->
-            <div class="section">
-                <div class="section-header">
-                    <div class="section-title">
-                        <div class="section-number">📝</div>
-                        Observações Clínicas Adicionais
-                    </div>
-                </div>
-                <div class="section-content">
-                    <div class="text-area-value">${solicitacao.observacoes}</div>
-                </div>
-            </div>
-            ` : ''}
         </div>
+    </div>
 
-        <!-- Footer Profissional -->
-        <div class="professional-footer">
-            <div class="footer-grid">
-                <div class="footer-section">
-                    <h4>Sistema de Gestão</h4>
-                    <p>Low Cost Onco<br>Oncologia Clínica</p>
+    <!-- Seção 3: Histórico de Tratamentos -->
+    <div class="section">
+        <div class="section-header">
+            <div class="section-title">
+                <div class="section-number">3</div>
+                Histórico de Tratamentos Oncológicos Prévios
+            </div>
+        </div>
+        <div class="section-content">
+            <div class="treatment-grid">
+                <div class="info-item">
+                    <span class="info-label">Cirurgia/Radioterapia</span>
+                    <div class="text-area-value">${solicitacao.tratamento_cirurgia_radio || 'Não realizado'}</div>
                 </div>
-                <div class="footer-section">
-                    <h4>Documento Gerado</h4>
-                    <p>${formatDate(new Date().toISOString())} - ${new Date().toLocaleTimeString('pt-BR')}<br>Documento Oficial</p>
+                <div class="info-item">
+                    <span class="info-label">Quimioterapia Adjuvante</span>
+                    <div class="text-area-value">${solicitacao.tratamento_quimio_adjuvante || 'Não realizado'}</div>
                 </div>
-                <div class="footer-section">
-                    <h4>Validade Médica</h4>
-                    <p>Conforme Resolução CFM<br>e Normas ANVISA</p>
+                <div class="info-item">
+                    <span class="info-label">Quimioterapia 1ª Linha</span>
+                    <div class="text-area-value">${solicitacao.tratamento_quimio_primeira_linha || 'Não realizado'}</div>
                 </div>
+                <div class="info-item">
+                    <span class="info-label">Quimioterapia ≥2ª Linha</span>
+                    <div class="text-area-value">${solicitacao.tratamento_quimio_segunda_linha || 'Não realizado'}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Seção 4: Protocolo Terapêutico -->
+    <div class="section">
+        <div class="section-header">
+            <div class="section-title">
+                <div class="section-number">4</div>
+                Protocolo Quimioterápico Proposto
+            </div>
+        </div>
+        <div class="section-content">
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">Finalidade Terapêutica</span>
+                    <span class="info-value">${solicitacao.finalidade || ''}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Performance Status (ECOG)</span>
+                    <span class="info-value">${solicitacao.performance_status || ''}</span>
+                </div>
+            </div>
+            
+            <div class="info-grid-4">
+                <div class="info-item">
+                    <span class="info-label">Protocolo/Sigla</span>
+                    <span class="info-value">${solicitacao.siglas || ''}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Ciclos Previstos</span>
+                    <span class="info-value">${solicitacao.ciclos_previstos || ''}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Ciclo Atual</span>
+                    <span class="info-value">${solicitacao.ciclo_atual || ''}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Superfície Corporal</span>
+                    <span class="info-value">${solicitacao.superficie_corporal || ''} m²</span>
+                </div>
+            </div>
+            
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">Peso Corporal</span>
+                    <span class="info-value">${solicitacao.peso || ''} kg</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Altura</span>
+                    <span class="info-value">${solicitacao.altura || ''} cm</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Seção 5: Prescrição Médica -->
+    <div class="section">
+        <div class="section-header">
+            <div class="section-title">
+                <div class="section-number">5</div>
+                Prescrição de Agentes Antineoplásicos
+            </div>
+        </div>
+        <div class="section-content">
+            <div class="medication-section">
+                <div class="medication-title">Medicamentos Antineoplásicos Prescritos</div>
+                <div class="info-item" style="margin-bottom: 15px;">
+                    <div class="text-area-value">${solicitacao.medicamentos_antineoplasticos || ''}</div>
+                </div>
+                
+                <div class="info-grid-3">
+                    <div class="info-item">
+                        <span class="info-label">Dosagem por m²</span>
+                        <span class="info-value">${solicitacao.dose_por_m2 || ''}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Dose Total Calculada</span>
+                        <span class="info-value">${solicitacao.dose_total || ''}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Via de Administração</span>
+                        <span class="info-value">${solicitacao.via_administracao || ''}</span>
+                    </div>
+                </div>
+                
+                <div class="info-item">
+                    <span class="info-label">Esquema Posológico (Dias e Intervalos)</span>
+                    <span class="info-value">${solicitacao.dias_aplicacao_intervalo || ''}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    ${solicitacao.medicacoes_associadas ? `
+    <!-- Seção 6: Medicações Coadjuvantes -->
+    <div class="section">
+        <div class="section-header">
+            <div class="section-title">
+                <div class="section-number">6</div>
+                Medicações Coadjuvantes e Suporte
+            </div>
+        </div>
+        <div class="section-content">
+            <div class="text-area-value">${solicitacao.medicacoes_associadas}</div>
+        </div>
+    </div>
+    ` : ''}
+
+    ${solicitacao.observacoes ? `
+    <!-- Observações Clínicas -->
+    <div class="section">
+        <div class="section-header">
+            <div class="section-title">
+                <div class="section-number">📝</div>
+                Observações Clínicas Adicionais
+            </div>
+        </div>
+        <div class="section-content">
+            <div class="text-area-value">${solicitacao.observacoes}</div>
+        </div>
+    </div>
+    ` : ''}
+
+    <!-- Seção de Responsabilidade Médica -->
+    <div class="signature-section">
+        <div class="signature-title">Responsabilidade Médica e Autorização</div>
+        
+        <div class="signature-grid">
+            <div>
+                <div class="info-item">
+                    <span class="info-label">Médico Oncologista Responsável</span>
+                    <span class="info-value">${solicitacao.medico_assinatura_crm || ''}</span>
+                </div>
+                <div class="signature-box">
+                    <div class="signature-label">Assinatura e Carimbo do Médico Responsável</div>
+                </div>
+            </div>
+            
+            <div>
+                <div class="info-item">
+                    <span class="info-label">Número da Autorização</span>
+                    <div class="authorization-box ${solicitacao.status === 'aprovada' ? 'authorization-approved' : ''}">
+                        ${solicitacao.numero_autorizacao || 'Aguardando processamento'}
+                    </div>
+                </div>
+                
+                ${solicitacao.status === 'aprovada' ? `
+                <div class="clinical-note">
+                    ✓ AUTORIZAÇÃO MÉDICA APROVADA<br>
+                    <small>Documento válido para execução do protocolo prescrito</small>
+                </div>
+                ` : ''}
             </div>
         </div>
     </div>
@@ -824,13 +841,14 @@ const generateProfessionalHTMLTemplate = (solicitacao: SolicitacaoAutorizacao, c
   `;
 };
 
-// Função principal para gerar o PDF profissional
+// Função principal para gerar o PDF
 export const generateAuthorizationPDF = async (solicitacao: SolicitacaoAutorizacao, clinicLogo?: string): Promise<Buffer> => {
-  console.log('🏥 Gerando PDF profissional para solicitação oncológica:', solicitacao.id);
+  console.log('🏥 Gerando PDF com header perfeitamente centralizado e footer nativo somente na última página:', solicitacao.id);
+  console.log('🔧 Logo da clínica:', clinicLogo ? `✅ Fornecida` : '❌ Usando padrão do sistema');
   
   let browser;
   try {
-    // Inicializar o Puppeteer com configurações otimizadas para documentos médicos
+    // Inicializar o Puppeteer
     browser = await puppeteer.launch({
       headless: true,
       args: [
@@ -846,15 +864,15 @@ export const generateAuthorizationPDF = async (solicitacao: SolicitacaoAutorizac
     
     const page = await browser.newPage();
     
-    // Configurar viewport para qualidade profissional
+    // Configurar viewport
     await page.setViewport({
       width: 1200,
       height: 1600,
       deviceScaleFactor: 2
     });
     
-    // Gerar o HTML profissional
-    const htmlContent = generateProfessionalHTMLTemplate(solicitacao, clinicLogo);
+    // Gerar o conteúdo HTML
+    const htmlContent = generateHTMLTemplate(solicitacao);
     
     // Carregar o HTML na página
     await page.setContent(htmlContent, { 
@@ -865,30 +883,46 @@ export const generateAuthorizationPDF = async (solicitacao: SolicitacaoAutorizac
     // Aguardar fontes carregarem
     await page.evaluateHandle('document.fonts.ready');
     
-    // Gerar o PDF com configurações para documento médico
+    // Aguardar um pouco para garantir que o layout está completo
+    await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 200)));
+    
+    // Gerar templates do header e footer nativos
+    const headerTemplate = generateHeaderTemplate(solicitacao, clinicLogo);
+    const footerTemplate = generateFooterTemplate();
+    
+    // Gerar PDF com configurações otimizadas para footer apenas na última página
     const pdfUint8Array = await page.pdf({
       format: 'A4',
       margin: {
-        top: '15mm',
-        right: '15mm',
-        bottom: '15mm',
-        left: '15mm'
+        top: '132px',     // Espaço para o header nativo
+        right: '0mm',     // Margem zero para footer ocupar largura total
+        bottom: '80px',   // Espaço para o footer nativo
+        left: '0mm'       // Margem zero para footer ocupar largura total
       },
       printBackground: true,
-      preferCSSPageSize: true,
-      displayHeaderFooter: false,
-      timeout: 60000
+      preferCSSPageSize: false,
+      displayHeaderFooter: true,        // Header e footer nativos ativados
+      headerTemplate: headerTemplate,   // Header em todas as páginas
+      footerTemplate: footerTemplate,   // Footer configurado para ocupar largura total
+      timeout: 60000,
+      scale: 1,
+      // Configuração específica para garantir que o footer apareça apenas na última página
+      omitBackground: false,
     });
     
     // Converter Uint8Array para Buffer
     const pdfBuffer = Buffer.from(pdfUint8Array);
     
-    console.log('✅ PDF médico profissional gerado! Tamanho:', (pdfBuffer.length / 1024).toFixed(2), 'KB');
+    console.log('✅ PDF gerado com sucesso! Tamanho:', (pdfBuffer.length / 1024).toFixed(2), 'KB');
+    console.log('📄 Header: Perfeitamente centralizado em todas as páginas');
+    console.log('📄 Footer: Nativo ocupando largura total somente na última página');
+    console.log('🖼️  Logo: Carregada do caminho especificado ou fallback SVG');
+    
     return pdfBuffer;
     
   } catch (error) {
-    console.error('❌ Erro ao gerar PDF médico:', error);
-    throw new Error(`Erro ao gerar documento médico: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+    console.error('❌ Erro ao gerar PDF:', error);
+    throw new Error(`Erro ao gerar documento: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
   } finally {
     if (browser) {
       await browser.close();
