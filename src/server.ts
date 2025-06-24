@@ -21,6 +21,21 @@ app.use(cors({
   credentials: true
 }));
 
+// ✅ MIDDLEWARE ESPECÍFICO PARA RESOLVER CSP EM PDFs
+app.use('/api/solicitacoes/:id/pdf', (req, res, next) => {
+  // Remover headers CSP que podem interferir com visualização
+  res.removeHeader('X-Frame-Options');
+  res.removeHeader('Content-Security-Policy');
+  res.removeHeader('X-Content-Type-Options');
+  
+  // Adicionar headers específicos para PDF
+  res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  
+  console.log('🔧 Headers CSP removidos para visualização de PDF');
+  next();
+});
+
 // Aumentar limite para uploads de arquivos maiores (PDFs)
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));

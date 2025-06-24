@@ -134,10 +134,12 @@ export class SolicitacaoController {
     }
   }
   
-  // ✅ GET /api/solicitacoes/:id/pdf - Gerar PDF com logo da clínica
+  // ✅ GET /api/solicitacoes/:id/pdf - Gerar PDF com suporte para visualização
   static async generatePDF(req: Request, res: Response): Promise<void> {
     try {
       const id = parseInt(req.params.id);
+      const isView = req.query.view === 'true';  // 🆕 Parâmetro para visualização
+      const isInline = req.query.inline === 'true';  // 🆕 Parâmetro para inline
       
       if (isNaN(id)) {
         const response: ApiResponse = {
@@ -149,6 +151,8 @@ export class SolicitacaoController {
       }
       
       console.log('🔧 Iniciando geração de PDF para solicitação:', id);
+      console.log('📋 Modo:', isView ? 'Visualização' : 'Download');
+      console.log('📋 Inline:', isInline ? 'Sim' : 'Não');
       
       // Buscar a solicitação
       const solicitacao = await SolicitacaoAutorizacaoModel.findById(id);
@@ -189,18 +193,35 @@ export class SolicitacaoController {
       console.log('🎨 Gerando PDF moderno...');
       const pdfBuffer = await generateAuthorizationPDF(solicitacao, clinicLogo);
       
-      // Configurar headers para download
+      // 🆕 CONFIGURAR HEADERS BASEADO NO MODO
       const fileName = `autorizacao_tratamento_${id}_${new Date().toISOString().split('T')[0]}.pdf`;
       
+      // Headers básicos
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
       res.setHeader('Content-Length', pdfBuffer.length);
-      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      
+      // 🆕 CONFIGURAR MODO DE EXIBIÇÃO
+      if (isView || isInline) {
+        // Para visualização inline no browser
+        res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+        // ✅ CORREÇÃO: Remover headers CSP problemáticos para iframe
+        res.removeHeader('X-Frame-Options');
+        res.removeHeader('Content-Security-Policy');
+        console.log('👁️  Configurado para visualização inline');
+      } else {
+        // Para download tradicional
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        console.log('💾 Configurado para download');
+      }
       
       // Enviar o PDF
       res.send(pdfBuffer);
       
       console.log('✅ PDF enviado com sucesso! Tamanho:', (pdfBuffer.length / 1024).toFixed(2), 'KB');
+      console.log('📋 Modo final:', isView ? 'Visualização' : 'Download');
       
     } catch (error) {
       console.error('❌ Erro ao gerar PDF:', error);
