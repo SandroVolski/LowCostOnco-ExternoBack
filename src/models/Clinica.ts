@@ -1,4 +1,4 @@
-// src/models/Clinica.ts
+// src/models/Clinica.ts - VERSÃO CORRIGIDA
 
 import { query } from '../config/database';
 import { 
@@ -115,23 +115,30 @@ export class ClinicaModel {
     }
   }
   
-  // Atualizar clínica
+  // ✅ MÉTODO CORRIGIDO - Atualizar clínica
   static async update(id: number, clinicaData: ClinicaUpdateInput): Promise<Clinica | null> {
     try {
+      // ✅ CORREÇÃO 1: Filtrar campos que NÃO devem ser atualizados
+      const fieldsToExclude = ['id', 'created_at', 'updated_at'];
       const updateFields: string[] = [];
       const values: any[] = [];
       
+      console.log('🔧 Dados recebidos para atualização:', clinicaData);
+      
       Object.entries(clinicaData).forEach(([key, value]) => {
-        if (value !== undefined) {
+        // ✅ CORREÇÃO 2: Pular campos que não devem ser atualizados
+        if (value !== undefined && !fieldsToExclude.includes(key)) {
           updateFields.push(`${key} = ?`);
           values.push(value);
         }
       });
       
       if (updateFields.length === 0) {
-        throw new Error('Nenhum campo para atualizar');
+        console.log('⚠️  Nenhum campo válido para atualizar');
+        throw new Error('Nenhum campo válido para atualizar');
       }
       
+      // ✅ CORREÇÃO 3: Query limpa sem duplicações
       const updateQuery = `
         UPDATE Clinicas 
         SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP
@@ -140,16 +147,22 @@ export class ClinicaModel {
       
       values.push(id);
       
+      console.log('🔧 Query de atualização:', updateQuery);
+      console.log('🔧 Valores:', values);
+      
       const result = await query(updateQuery, values);
       
       if (result.affectedRows === 0) {
+        console.log('⚠️  Nenhuma linha afetada na atualização');
         return null;
       }
+      
+      console.log('✅ Clínica atualizada com sucesso');
       
       // Buscar a clínica atualizada
       return await this.findByIdSimple(id);
     } catch (error) {
-      console.error('Erro ao atualizar clínica:', error);
+      console.error('❌ Erro ao atualizar clínica:', error);
       throw new Error('Erro ao atualizar clínica');
     }
   }
@@ -271,21 +284,23 @@ export class ResponsavelTecnicoModel {
     }
   }
   
-  // Atualizar responsável técnico
+  // ✅ MÉTODO CORRIGIDO - Atualizar responsável técnico
   static async update(id: number, responsavelData: ResponsavelTecnicoUpdateInput): Promise<ResponsavelTecnico | null> {
     try {
+      // ✅ CORREÇÃO: Filtrar campos que NÃO devem ser atualizados
+      const fieldsToExclude = ['id', 'clinica_id', 'created_at', 'updated_at'];
       const updateFields: string[] = [];
       const values: any[] = [];
       
       Object.entries(responsavelData).forEach(([key, value]) => {
-        if (value !== undefined) {
+        if (value !== undefined && !fieldsToExclude.includes(key)) {
           updateFields.push(`${key} = ?`);
           values.push(value);
         }
       });
       
       if (updateFields.length === 0) {
-        throw new Error('Nenhum campo para atualizar');
+        throw new Error('Nenhum campo válido para atualizar');
       }
       
       const updateQuery = `
