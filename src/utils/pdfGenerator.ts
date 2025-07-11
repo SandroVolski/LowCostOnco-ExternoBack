@@ -300,22 +300,21 @@ const generateHTMLTemplate = (solicitacao: SolicitacaoAutorizacao): string => {
             line-height: 1.4;
             color: #2c3e50;
             background: white;
-            padding: 20px 30px 30px 30px;
+            padding: 15px 25px 20px 25px;
         }
         
         /* Seções do formulário */
         .section {
-            margin-bottom: 20px;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
+            margin-bottom: 12px;
             overflow: hidden;
             page-break-inside: avoid;
         }
         
         .section-header {
             background: #f8f9fa;
-            padding: 12px 18px;
+            padding: 8px 12px;
             border-bottom: 1px solid #dee2e6;
+            border-radius: 3px 3px 0 0;
         }
         
         .section-title {
@@ -343,7 +342,7 @@ const generateHTMLTemplate = (solicitacao: SolicitacaoAutorizacao): string => {
         }
         
         .section-content {
-            padding: 18px;
+            padding: 12px;
             background: white;
         }
         
@@ -351,30 +350,30 @@ const generateHTMLTemplate = (solicitacao: SolicitacaoAutorizacao): string => {
         .info-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin-bottom: 12px;
+            gap: 8px;
+            margin-bottom: 8px;
         }
         
         .info-grid-3 {
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 12px;
+            gap: 8px;
+            margin-bottom: 8px;
         }
         
         .info-grid-4 {
             display: grid;
             grid-template-columns: 1fr 1fr 1fr 1fr;
-            gap: 8px;
-            margin-bottom: 12px;
+            gap: 6px;
+            margin-bottom: 8px;
         }
         
         .staging-grid {
             display: grid;
             grid-template-columns: 70px 70px 70px 1fr;
-            gap: 8px;
-            margin-bottom: 12px;
-            padding: 12px;
+            gap: 6px;
+            margin-bottom: 8px;
+            padding: 8px;
             background: #f8f9fa;
             border: 1px solid #dee2e6;
             border-radius: 3px;
@@ -383,12 +382,12 @@ const generateHTMLTemplate = (solicitacao: SolicitacaoAutorizacao): string => {
         .treatment-grid {
             display: grid;
             grid-template-columns: 1fr 1fr 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 12px;
+            gap: 8px;
+            margin-bottom: 8px;
         }
         
         .info-item {
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
         
         .info-label {
@@ -427,14 +426,14 @@ const generateHTMLTemplate = (solicitacao: SolicitacaoAutorizacao): string => {
             background: #f8f9fa;
             border: 1px solid #dee2e6;
             border-radius: 3px;
-            padding: 15px;
-            margin: 12px 0;
+            padding: 10px;
+            margin: 8px 0;
         }
         
         .medication-title {
             font-weight: 700;
             color: #2c3e50;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
             font-size: 11px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -445,8 +444,8 @@ const generateHTMLTemplate = (solicitacao: SolicitacaoAutorizacao): string => {
             background: white;
             border: 2px solid #2c3e50;
             border-radius: 4px;
-            padding: 20px;
-            margin: 25px 0 20px 0;
+            padding: 15px;
+            margin: 15px 0 10px 0;
             page-break-inside: avoid;
         }
         
@@ -455,7 +454,7 @@ const generateHTMLTemplate = (solicitacao: SolicitacaoAutorizacao): string => {
             font-weight: 700;
             color: #2c3e50;
             text-transform: uppercase;
-            margin-bottom: 15px;
+            margin-bottom: 10px;
             text-align: center;
             letter-spacing: 0.5px;
         }
@@ -463,18 +462,18 @@ const generateHTMLTemplate = (solicitacao: SolicitacaoAutorizacao): string => {
         .signature-grid {
             display: grid;
             grid-template-columns: 2fr 1fr;
-            gap: 25px;
+            gap: 18px;
             align-items: start;
         }
         
         .signature-box {
             border: 1px solid #6c757d;
             border-radius: 2px;
-            padding: 30px 15px;
+            padding: 25px 12px;
             text-align: center;
-            margin-top: 10px;
+            margin-top: 8px;
             background: white;
-            min-height: 60px;
+            min-height: 50px;
         }
         
         .signature-label {
@@ -489,9 +488,9 @@ const generateHTMLTemplate = (solicitacao: SolicitacaoAutorizacao): string => {
             background: #f8f9fa;
             border: 1px solid #dee2e6;
             border-radius: 3px;
-            padding: 15px;
+            padding: 12px;
             text-align: center;
-            min-height: 60px;
+            min-height: 50px;
         }
         
         .authorization-approved {
@@ -505,8 +504,8 @@ const generateHTMLTemplate = (solicitacao: SolicitacaoAutorizacao): string => {
             background: white;
             border: 1px solid #ced4da;
             border-radius: 2px;
-            padding: 8px;
-            min-height: 50px;
+            padding: 6px;
+            min-height: 40px;
             white-space: pre-wrap;
             font-size: 10px;
             line-height: 1.3;
@@ -516,16 +515,16 @@ const generateHTMLTemplate = (solicitacao: SolicitacaoAutorizacao): string => {
             background: #e9ecef;
             border-left: 3px solid #2c3e50;
             border-radius: 0 2px 2px 0;
-            padding: 12px;
-            margin: 8px 0;
+            padding: 8px;
+            margin: 6px 0;
         }
         
         .clinical-note {
             background: #fff3cd;
             border: 1px solid #ffeaa7;
             border-radius: 3px;
-            padding: 10px;
-            margin: 8px 0;
+            padding: 8px;
+            margin: 6px 0;
             font-size: 10px;
             color: #856404;
         }
@@ -541,7 +540,7 @@ const generateHTMLTemplate = (solicitacao: SolicitacaoAutorizacao): string => {
                 background: white;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
-                padding: 20px 30px 30px 30px;
+                padding: 15px 25px 20px 25px;
             }
             
             .section {
@@ -745,11 +744,11 @@ const generateHTMLTemplate = (solicitacao: SolicitacaoAutorizacao): string => {
             </div>
         </div>
         <div class="section-content">
-            <div class="medication-section">
-                <div class="medication-title">Medicamentos Antineoplásicos Prescritos</div>
-                <div class="info-item" style="margin-bottom: 15px;">
-                    <div class="text-area-value">${solicitacao.medicamentos_antineoplasticos || ''}</div>
-                </div>
+                            <div class="medication-section">
+                    <div class="medication-title">Medicamentos Antineoplásicos Prescritos</div>
+                    <div class="info-item" style="margin-bottom: 8px;">
+                        <div class="text-area-value">${solicitacao.medicamentos_antineoplasticos || ''}</div>
+                    </div>
                 
                 <div class="info-grid-3">
                     <div class="info-item">
