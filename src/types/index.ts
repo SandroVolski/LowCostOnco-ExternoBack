@@ -93,3 +93,8 @@ export interface PaginatedResponse<T> {
     totalPages: number;
   };
 }
+
+// Re-export types from other modules
+export * from './clinic';
+export * from './solicitacao';
+export * from './protocolo';

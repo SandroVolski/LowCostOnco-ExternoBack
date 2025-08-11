@@ -31,6 +31,10 @@ const convertDateToMySQL = (dateStr: string): string => {
   return '';
 };
 
+// Log somente em desenvolvimento
+const isDevelopmentEnv = (process.env.NODE_ENV || 'development') !== 'production';
+const logDev = (...args: any[]) => { if (isDevelopmentEnv) console.log(...args); };
+
 // Função auxiliar para validar dados obrigatórios
 const validatePacienteData = (data: PacienteCreateInput): string[] => {
   const errors: string[] = [];
@@ -100,21 +104,19 @@ export class PacienteModel {
     `;
     
     try {
-      console.log('Executando queries...');
-      console.log('Base query:', baseSelectQuery);
-      console.log('Parâmetros de busca:', searchParams);
-      console.log('Limit:', limit, 'Offset:', offset);
+      logDev('Executando queries...');
+      logDev('Parâmetros de busca:', searchParams, 'Limit:', limit, 'Offset:', offset);
       
-      // Executar contagem
-      const countResult = await query(countQuery, searchParams);
-      
-      // Executar busca com limit usando função especial
-      const patients = await queryWithLimit(baseSelectQuery, searchParams, limit, offset);
+      // Executar contagem e busca em paralelo
+      const [countResult, patients] = await Promise.all([
+        query(countQuery, searchParams),
+        queryWithLimit(baseSelectQuery, searchParams, limit, offset)
+      ]);
       
       const total = countResult[0]?.total || 0;
       const totalPages = Math.ceil(total / limit);
       
-      console.log(`✅ Sucesso! ${patients.length} pacientes encontrados de um total de ${total}`);
+      logDev(`✅ Sucesso! ${patients.length} pacientes de ${total}`);
       
       return {
         data: patients,
@@ -187,13 +189,13 @@ export class PacienteModel {
     `;
     
     try {
-      console.log('Executando queries da clínica...');
+      logDev('Executando queries da clínica...');
       
-      // Executar contagem
-      const countResult = await query(countQuery, searchParams);
-      
-      // Executar busca com limit usando função especial
-      const patients = await queryWithLimit(baseSelectQuery, searchParams, limit, offset);
+      // Executar contagem e busca com limit em paralelo
+      const [countResult, patients] = await Promise.all([
+        query(countQuery, searchParams),
+        queryWithLimit(baseSelectQuery, searchParams, limit, offset)
+      ]);
       
       const total = countResult[0]?.total || 0;
       const totalPages = Math.ceil(total / limit);
@@ -215,7 +217,7 @@ export class PacienteModel {
   
   // Criar paciente
   static async create(pacienteData: PacienteCreateInput): Promise<Paciente> {
-    console.log('🔧 Dados recebidos para criação:', pacienteData);
+    logDev('🔧 Dados recebidos para criação:', pacienteData);
     
     // Validar dados obrigatórios
     const validationErrors = validatePacienteData(pacienteData);
@@ -237,7 +239,7 @@ export class PacienteModel {
         throw new Error('Data da primeira solicitação inválida');
     }
     
-    console.log('🔧 Datas convertidas:', {
+    logDev('🔧 Datas convertidas:', {
         dataNascimento,
         dataPrimeiraSolicitacao
     });
@@ -275,13 +277,13 @@ export class PacienteModel {
         pacienteData.observacoes || null
     ];
     
-    console.log('🔧 Valores finais para inserção:', values);
+    logDev('🔧 Valores finais para inserção:', values);
     
     try {
         const result = await query(insertQuery, values);
         const insertId = result.insertId;
         
-        console.log('✅ Paciente criado com ID:', insertId);
+        logDev('✅ Paciente criado com ID:', insertId);
         
         // Buscar o paciente recém-criado
         const newPaciente = await this.findById(insertId);

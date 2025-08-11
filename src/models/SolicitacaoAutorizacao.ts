@@ -8,6 +8,12 @@ export class SolicitacaoAutorizacaoModel {
   // Criar nova solicitação
   static async create(dadosSolicitacao: SolicitacaoCreateInput): Promise<SolicitacaoAutorizacao> {
     console.log('🔧 Criando nova solicitação de autorização...');
+    console.log('📋 Dados recebidos no modelo:', {
+      paciente_id: dadosSolicitacao.paciente_id,
+      tipo_paciente_id: typeof dadosSolicitacao.paciente_id,
+      clinica_id: dadosSolicitacao.clinica_id,
+      cliente_nome: dadosSolicitacao.cliente_nome
+    });
     
     const insertQuery = `
       INSERT INTO Solicitacoes_Autorizacao (
@@ -67,6 +73,9 @@ export class SolicitacaoAutorizacaoModel {
     ];
     
     try {
+      console.log('🔧 Executando query de inserção...');
+      console.log('📋 Valores a serem inseridos:', values);
+      
       const result = await query(insertQuery, values);
       const insertId = result.insertId;
       

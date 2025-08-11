@@ -44,8 +44,12 @@ export interface Clinica {
   cidade?: string;
   estado?: string;
   cep?: string;
+  // Campos antigos (mantidos para compatibilidade)
   telefone?: string;
   email?: string;
+  // Novos campos para múltiplos contatos
+  telefones?: string[];
+  emails?: string[];
   website?: string;
   logo_url?: string;
   observacoes?: string;
@@ -67,8 +71,12 @@ export interface ClinicaCreateInput {
   cidade?: string;
   estado?: string;
   cep?: string;
+  // Campos antigos (mantidos para compatibilidade)
   telefone?: string;
   email?: string;
+  // Novos campos para múltiplos contatos
+  telefones?: string[];
+  emails?: string[];
   website?: string;
   logo_url?: string;
   observacoes?: string;
@@ -85,8 +93,12 @@ export interface ClinicaUpdateInput {
   cidade?: string;
   estado?: string;
   cep?: string;
+  // Campos antigos (mantidos para compatibilidade)
   telefone?: string;
   email?: string;
+  // Novos campos para múltiplos contatos
+  telefones?: string[];
+  emails?: string[];
   website?: string;
   logo_url?: string;
   observacoes?: string;

@@ -1,11 +1,15 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { testConnection } from './config/database';
+import { testConnection, closePool } from './config/database';
 import pacienteRoutes from './routes/pacienteRoutes';
 import solicitacaoRoutes from './routes/solicitacaoRoutes';
 import clinicaRoutes from './routes/clinicaRoutes';
+import protocoloRoutes from './routes/protocoloRoutes';
 import { optionalAuth } from './middleware/auth';
+import { cacheMiddleware, cacheHeaders, getCacheStats } from './middleware/cache';
+import { rateLimit, getRateLimitStats } from './middleware/rateLimit';
+import { performanceMonitor, getPerformanceStats, diagnosePerformanceIssues } from './utils/performance';
 
 // Carregar variáveis de ambiente
 dotenv.config();
@@ -40,6 +44,15 @@ app.use('/api/solicitacoes/:id/pdf', (req, res, next) => {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// Middleware de monitoramento de performance
+app.use(performanceMonitor);
+
+// Middleware de rate limiting global
+app.use(rateLimit());
+
+// Middleware de cache headers
+app.use(cacheHeaders);
+
 // Middleware de log para debug
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
@@ -56,10 +69,42 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Rotas da API
-app.use('/api/pacientes', optionalAuth, pacienteRoutes);
-app.use('/api/solicitacoes', optionalAuth, solicitacaoRoutes); // ✅ NOVA ROTA ADICIONADA
-app.use('/api/clinicas', optionalAuth, clinicaRoutes);
+// Rota de health check para compatibilidade com frontend
+app.get('/api/health', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Servidor funcionando',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0'
+  });
+});
+
+// Rota para estatísticas do sistema
+app.get('/api/stats', (req, res) => {
+  res.json({
+    success: true,
+    cache: getCacheStats(),
+    rateLimit: getRateLimitStats(),
+    performance: getPerformanceStats(),
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Rota para diagnóstico de performance
+app.get('/api/performance/diagnose', (req, res) => {
+  const diagnosis = diagnosePerformanceIssues();
+  res.json({
+    success: true,
+    diagnosis,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Rotas da API com cache para GET requests
+app.use('/api/pacientes', optionalAuth, cacheMiddleware(), pacienteRoutes);
+app.use('/api/solicitacoes', optionalAuth, cacheMiddleware(), solicitacaoRoutes);
+app.use('/api/clinicas', optionalAuth, cacheMiddleware(), clinicaRoutes);
+app.use('/api/protocolos', optionalAuth, cacheMiddleware(), protocoloRoutes);
 
 // Rota de teste para verificar conexão com banco
 app.get('/api/test-db', async (req, res) => {
@@ -88,7 +133,10 @@ app.get('/api', (req, res) => {
       pacientes: '/api/pacientes',
       solicitacoes: '/api/solicitacoes',
       clinicas: '/api/clinicas',
+      protocolos: '/api/protocolos',
       health: '/health',
+      stats: '/api/stats',
+      performance: '/api/performance/diagnose',
       testDb: '/api/test-db'
     },
     timestamp: new Date().toISOString()
@@ -129,6 +177,8 @@ const startServer = async () => {
       console.log('\n🚀 Servidor iniciado com sucesso!');
       console.log(`📡 API disponível em: http://localhost:${PORT}`);
       console.log(`🏥 Health check: http://localhost:${PORT}/health`);
+      console.log(`📊 Stats: http://localhost:${PORT}/api/stats`);
+      console.log(`🔍 Performance: http://localhost:${PORT}/api/performance/diagnose`);
       console.log(`🔧 Test DB: http://localhost:${PORT}/api/test-db`);
       console.log(`👤 Pacientes API: http://localhost:${PORT}/api/pacientes`);
       console.log(`📋 Solicitações API: http://localhost:${PORT}/api/solicitacoes`);
@@ -136,6 +186,8 @@ const startServer = async () => {
       console.log('\n📚 Endpoints disponíveis:');
       console.log('   GET    /health');
       console.log('   GET    /api');
+      console.log('   GET    /api/stats');
+      console.log('   GET    /api/performance/diagnose');
       console.log('   GET    /api/test-db');
       console.log('   GET    /api/pacientes');
       console.log('   POST   /api/pacientes');
@@ -148,6 +200,11 @@ const startServer = async () => {
       console.log('   GET    /api/solicitacoes/:id/pdf');
       console.log('   PUT    /api/solicitacoes/:id/status');
       console.log('   DELETE /api/solicitacoes/:id');
+      console.log('   GET    /api/protocolos');
+      console.log('   POST   /api/protocolos');
+      console.log('   GET    /api/protocolos/:id');
+      console.log('   PUT    /api/protocolos/:id');
+      console.log('   DELETE /api/protocolos/:id');
       console.log('\n🎯 Pronto para receber requisições!\n');
     });
     
@@ -168,13 +225,15 @@ process.on('uncaughtException', (error) => {
 });
 
 // Graceful shutdown
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('\n🛑 Recebido SIGINT. Encerrando servidor graciosamente...');
+  await closePool();
   process.exit(0);
 });
 
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('\n🛑 Recebido SIGTERM. Encerrando servidor graciosamente...');
+  await closePool();
   process.exit(0);
 });
 

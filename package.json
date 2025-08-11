@@ -1,23 +1,29 @@
 {
   "name": "sistema-clinicas-backend",
   "version": "1.0.0",
-  "description": "Backend para Sistema de Clínicas - Low Cost Onco",
-  "main": "dist/server.js",
+  "description": "Backend para Sistema de Clínicas - Onkhos",
+  "main": "src/server.ts",
   "scripts": {
     "start": "node dist/server.js",
     "dev": "nodemon src/server.ts",
     "build": "tsc",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest",
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write src/**/*.ts"
   },
   "keywords": [
     "nodejs",
+    "typescript",
     "express",
     "mysql",
-    "typescript"
+    "pdf",
+    "oncologia",
+    "clinicas"
   ],
-  "author": "Low Cost Onco",
-  "license": "ISC",
+  "author": "Onkhos",
+  "license": "MIT",
   "dependencies": {
+    "axios": "^1.11.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",

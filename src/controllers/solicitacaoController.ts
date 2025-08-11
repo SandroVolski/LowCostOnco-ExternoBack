@@ -3,9 +3,13 @@
 import { Request, Response } from 'express';
 import { SolicitacaoAutorizacaoModel } from '../models/SolicitacaoAutorizacao';
 import { ClinicaModel } from '../models/Clinica';
-import { SolicitacaoCreateInput, SolicitacaoUpdateInput } from '../types/solicitacao';
-import { ApiResponse } from '../types';
 import { generateAuthorizationPDF } from '../utils/pdfGenerator';
+import { SolicitacaoCreateInput, SolicitacaoUpdateInput, ApiResponse } from '../types';
+
+// Declaração global para cache de PDFs
+declare global {
+  var pdfCache: Map<string, Buffer> | undefined;
+}
 
 export class SolicitacaoController {
   
@@ -13,6 +17,14 @@ export class SolicitacaoController {
   static async create(req: Request, res: Response): Promise<void> {
     try {
       const dadosSolicitacao: SolicitacaoCreateInput = req.body;
+      
+      // Log para debug do paciente_id
+      console.log('🔧 Dados recebidos para criação:', {
+        paciente_id: dadosSolicitacao.paciente_id,
+        tipo_paciente_id: typeof dadosSolicitacao.paciente_id,
+        clinica_id: dadosSolicitacao.clinica_id,
+        cliente_nome: dadosSolicitacao.cliente_nome
+      });
       
       // Validações básicas
       if (!dadosSolicitacao.hospital_nome || !dadosSolicitacao.cliente_nome || 
@@ -34,6 +46,19 @@ export class SolicitacaoController {
       if (!dadosSolicitacao.clinica_id) {
         dadosSolicitacao.clinica_id = 1; // Valor padrão para testes
       }
+      
+      // Tratar paciente_id - converter para número ou null
+      if (dadosSolicitacao.paciente_id !== undefined && dadosSolicitacao.paciente_id !== null) {
+        const pacienteId = parseInt(dadosSolicitacao.paciente_id.toString());
+        dadosSolicitacao.paciente_id = isNaN(pacienteId) ? null : pacienteId;
+      } else {
+        dadosSolicitacao.paciente_id = null;
+      }
+      
+      console.log('🔧 Dados tratados:', {
+        paciente_id: dadosSolicitacao.paciente_id,
+        tipo_paciente_id: typeof dadosSolicitacao.paciente_id
+      });
       
       const novaSolicitacao = await SolicitacaoAutorizacaoModel.create(dadosSolicitacao);
       
@@ -154,6 +179,26 @@ export class SolicitacaoController {
       console.log('📋 Modo:', isView ? 'Visualização' : 'Download');
       console.log('📋 Inline:', isInline ? 'Sim' : 'Não');
       
+      // 🆕 CACHE PARA PDFs - Verificar se já existe em cache
+      const cacheKey = `pdf_${id}_${isView ? 'view' : 'download'}`;
+      const cachedPdf = global.pdfCache?.get(cacheKey);
+      
+      if (cachedPdf && !isView) { // Cache apenas para download, não para visualização
+        console.log('📦 PDF encontrado em cache, enviando diretamente...');
+        
+        const fileName = `autorizacao_tratamento_${id}_${new Date().toISOString().split('T')[0]}.pdf`;
+        
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Length', cachedPdf.length);
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache por 1 hora
+        res.setHeader('ETag', `"${id}_${cachedPdf.length}"`);
+        
+        res.send(cachedPdf);
+        console.log('✅ PDF enviado do cache! Tamanho:', (cachedPdf.length / 1024).toFixed(2), 'KB');
+        return;
+      }
+      
       // Buscar a solicitação
       const solicitacao = await SolicitacaoAutorizacaoModel.findById(id);
       
@@ -191,7 +236,20 @@ export class SolicitacaoController {
       
       // ✅ GERAR O PDF COM LOGO
       console.log('🎨 Gerando PDF moderno...');
+      const startTime = Date.now();
       const pdfBuffer = await generateAuthorizationPDF(solicitacao, clinicLogo);
+      const generationTime = Date.now() - startTime;
+      
+      console.log(`⏱️  Tempo de geração: ${generationTime}ms`);
+      
+      // 🆕 ARMAZENAR NO CACHE (apenas para download)
+      if (!isView && !global.pdfCache) {
+        global.pdfCache = new Map();
+      }
+      if (!isView && global.pdfCache) {
+        global.pdfCache.set(cacheKey, pdfBuffer);
+        console.log('💾 PDF armazenado no cache');
+      }
       
       // 🆕 CONFIGURAR HEADERS BASEADO NO MODO
       const fileName = `autorizacao_tratamento_${id}_${new Date().toISOString().split('T')[0]}.pdf`;
@@ -199,22 +257,32 @@ export class SolicitacaoController {
       // Headers básicos
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Length', pdfBuffer.length);
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
       
-      // 🆕 CONFIGURAR MODO DE EXIBIÇÃO
+      // 🆕 CONFIGURAR MODO DE EXIBIÇÃO COM OTIMIZAÇÕES
       if (isView || isInline) {
-        // Para visualização inline no browser
+        // Para visualização inline no browser - OTIMIZADO
         res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+        res.setHeader('Cache-Control', 'public, max-age=1800'); // Cache por 30 minutos
+        res.setHeader('ETag', `"${id}_view_${pdfBuffer.length}"`);
+        
         // ✅ CORREÇÃO: Remover headers CSP problemáticos para iframe
         res.removeHeader('X-Frame-Options');
         res.removeHeader('Content-Security-Policy');
-        console.log('👁️  Configurado para visualização inline');
+        res.removeHeader('X-Content-Type-Options');
+        
+        // 🆕 Headers otimizados para visualização rápida
+        res.setHeader('Accept-Ranges', 'bytes');
+        res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
+        res.setHeader('Referrer-Policy', 'no-referrer');
+        
+        console.log('👁️  Configurado para visualização inline (otimizado)');
       } else {
-        // Para download tradicional
+        // Para download tradicional - OTIMIZADO
         res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-        console.log('💾 Configurado para download');
+        res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache por 1 hora
+        res.setHeader('ETag', `"${id}_download_${pdfBuffer.length}"`);
+        
+        console.log('💾 Configurado para download (otimizado)');
       }
       
       // Enviar o PDF
@@ -222,6 +290,7 @@ export class SolicitacaoController {
       
       console.log('✅ PDF enviado com sucesso! Tamanho:', (pdfBuffer.length / 1024).toFixed(2), 'KB');
       console.log('📋 Modo final:', isView ? 'Visualização' : 'Download');
+      console.log(`⏱️  Tempo total: ${Date.now() - startTime}ms`);
       
     } catch (error) {
       console.error('❌ Erro ao gerar PDF:', error);

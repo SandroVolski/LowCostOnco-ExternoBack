@@ -7,7 +7,7 @@ export type FinalidadeType = 'neoadjuvante' | 'adjuvante' | 'curativo' | 'contro
 export interface SolicitacaoAutorizacao {
   id?: number;
   clinica_id: number;
-  paciente_id?: number;
+  paciente_id?: number | null;
   
   // Dados da Clínica
   hospital_nome: string;
@@ -58,6 +58,15 @@ export interface SolicitacaoAutorizacao {
   medico_assinatura_crm: string;
   numero_autorizacao?: string;
   
+  // Dados do Protocolo
+  protocolo_id?: number;
+  protocolo_nome?: string;
+  protocolo_descricao?: string;
+  protocolo_cid?: string;
+  protocolo_intervalo_ciclos?: number;
+  protocolo_linha?: number;
+  protocolo_medicamentos_json?: string;
+  
   // Status e Controle
   status: SolicitacaoStatus;
   observacoes?: string;
@@ -69,7 +78,7 @@ export interface SolicitacaoAutorizacao {
 
 export interface SolicitacaoCreateInput {
   clinica_id: number;
-  paciente_id?: number;
+  paciente_id?: number | null;
   hospital_nome: string;
   hospital_codigo: string;
   cliente_nome: string;
@@ -106,6 +115,14 @@ export interface SolicitacaoCreateInput {
   medico_assinatura_crm: string;
   numero_autorizacao?: string;
   observacoes?: string;
+  // Dados do Protocolo
+  protocolo_id?: number;
+  protocolo_nome?: string;
+  protocolo_descricao?: string;
+  protocolo_cid?: string;
+  protocolo_intervalo_ciclos?: number;
+  protocolo_linha?: number;
+  protocolo_medicamentos_json?: string;
 }
 
 export interface SolicitacaoUpdateInput {

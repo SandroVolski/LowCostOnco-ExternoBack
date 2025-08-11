@@ -11,6 +11,80 @@ import {
   ClinicaProfile
 } from '../types/clinic';
 
+// Função auxiliar para migrar dados antigos para o novo formato
+const migrateContactData = (clinica: any): Clinica => {
+  // Se já tem os novos campos, retorna como está
+  if (clinica.telefones || clinica.emails) {
+    return clinica;
+  }
+  
+  // Migrar dados antigos para o novo formato
+  const migratedClinica = { ...clinica };
+  
+  // Migrar telefone antigo para array
+  if (clinica.telefone && !clinica.telefones) {
+    migratedClinica.telefones = [clinica.telefone];
+  } else if (!clinica.telefones) {
+    migratedClinica.telefones = [''];
+  }
+  
+  // Migrar email antigo para array
+  if (clinica.email && !clinica.emails) {
+    migratedClinica.emails = [clinica.email];
+  } else if (!clinica.emails) {
+    migratedClinica.emails = [''];
+  }
+  
+  return migratedClinica;
+};
+
+// Função auxiliar para preparar dados para inserção/atualização
+const prepareContactData = (clinicaData: any): any => {
+  const prepared = { ...clinicaData };
+  
+  // Converter arrays de telefones e emails para JSON
+  if (prepared.telefones && Array.isArray(prepared.telefones)) {
+    prepared.telefones = JSON.stringify(prepared.telefones);
+  }
+  
+  if (prepared.emails && Array.isArray(prepared.emails)) {
+    prepared.emails = JSON.stringify(prepared.emails);
+  }
+  
+  return prepared;
+};
+
+// Função auxiliar para processar dados vindos do banco
+const processContactData = (clinica: any): Clinica => {
+  const processed = { ...clinica };
+  
+  // Converter JSON de telefones para array
+  if (clinica.telefones && typeof clinica.telefones === 'string') {
+    try {
+      processed.telefones = JSON.parse(clinica.telefones);
+    } catch (error) {
+      console.warn('Erro ao processar telefones JSON:', error);
+      processed.telefones = [clinica.telefones];
+    }
+  } else if (!clinica.telefones) {
+    processed.telefones = [''];
+  }
+  
+  // Converter JSON de emails para array
+  if (clinica.emails && typeof clinica.emails === 'string') {
+    try {
+      processed.emails = JSON.parse(clinica.emails);
+    } catch (error) {
+      console.warn('Erro ao processar emails JSON:', error);
+      processed.emails = [clinica.emails];
+    }
+  } else if (!clinica.emails) {
+    processed.emails = [''];
+  }
+  
+  return migrateContactData(processed);
+};
+
 export class ClinicaModel {
   
   // Buscar clínica por ID com responsáveis técnicos
@@ -26,7 +100,7 @@ export class ClinicaModel {
         return null;
       }
       
-      const clinica = clinicResult[0];
+      const clinica = processContactData(clinicResult[0]);
       
       // Buscar responsáveis técnicos
       const responsaveisQuery = `
@@ -51,7 +125,7 @@ export class ClinicaModel {
     try {
       const selectQuery = `SELECT * FROM Clinicas WHERE codigo = ?`;
       const result = await query(selectQuery, [codigo]);
-      return result.length > 0 ? result[0] : null;
+      return result.length > 0 ? processContactData(result[0]) : null;
     } catch (error) {
       console.error('Erro ao buscar clínica por código:', error);
       throw new Error('Erro ao buscar clínica');
@@ -63,7 +137,7 @@ export class ClinicaModel {
     try {
       const selectQuery = `SELECT * FROM Clinicas WHERE usuario = ?`;
       const result = await query(selectQuery, [usuario]);
-      return result.length > 0 ? result[0] : null;
+      return result.length > 0 ? processContactData(result[0]) : null;
     } catch (error) {
       console.error('Erro ao buscar clínica por usuário:', error);
       throw new Error('Erro ao buscar clínica');
@@ -73,12 +147,14 @@ export class ClinicaModel {
   // Criar nova clínica
   static async create(clinicaData: ClinicaCreateInput): Promise<Clinica> {
     try {
+      const preparedData = prepareContactData(clinicaData);
+      
       const insertQuery = `
         INSERT INTO Clinicas (
           nome, codigo, cnpj, endereco, cidade, estado, cep, 
-          telefone, email, website, logo_url, observacoes, 
+          telefone, email, telefones, emails, website, logo_url, observacoes, 
           usuario, senha, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
       
       const values = [
@@ -91,6 +167,8 @@ export class ClinicaModel {
         clinicaData.cep || null,
         clinicaData.telefone || null,
         clinicaData.email || null,
+        preparedData.telefones || null,
+        preparedData.emails || null,
         clinicaData.website || null,
         clinicaData.logo_url || null,
         clinicaData.observacoes || null,
@@ -99,62 +177,69 @@ export class ClinicaModel {
         clinicaData.status || 'ativo'
       ];
       
+      console.log('🔧 Criando nova clínica...');
+      console.log('📋 Dados preparados:', {
+        nome: clinicaData.nome,
+        codigo: clinicaData.codigo,
+        telefones: preparedData.telefones,
+        emails: preparedData.emails
+      });
+      
       const result = await query(insertQuery, values);
       const insertId = result.insertId;
       
+      console.log('✅ Clínica criada com ID:', insertId);
+      
       // Buscar a clínica recém-criada
-      const newClinica = await this.findByIdSimple(insertId);
-      if (!newClinica) {
+      const novaClinica = await this.findByIdSimple(insertId);
+      if (!novaClinica) {
         throw new Error('Erro ao buscar clínica recém-criada');
       }
       
-      return newClinica;
+      return novaClinica;
     } catch (error) {
-      console.error('Erro ao criar clínica:', error);
+      console.error('❌ Erro ao criar clínica:', error);
       throw new Error('Erro ao criar clínica');
     }
   }
   
-  // ✅ MÉTODO CORRIGIDO - Atualizar clínica
+  // Atualizar clínica
   static async update(id: number, clinicaData: ClinicaUpdateInput): Promise<Clinica | null> {
     try {
-      // ✅ CORREÇÃO 1: Filtrar campos que NÃO devem ser atualizados
-      const fieldsToExclude = ['id', 'created_at', 'updated_at'];
+      const preparedData = prepareContactData(clinicaData);
+      
+      // Construir query dinâmica baseada nos campos fornecidos
       const updateFields: string[] = [];
       const values: any[] = [];
       
-      console.log('🔧 Dados recebidos para atualização:', clinicaData);
-      
-      Object.entries(clinicaData).forEach(([key, value]) => {
-        // ✅ CORREÇÃO 2: Pular campos que não devem ser atualizados
-        if (value !== undefined && !fieldsToExclude.includes(key)) {
+      Object.entries(preparedData).forEach(([key, value]) => {
+        if (value !== undefined) {
           updateFields.push(`${key} = ?`);
           values.push(value);
         }
       });
       
       if (updateFields.length === 0) {
-        console.log('⚠️  Nenhum campo válido para atualizar');
-        throw new Error('Nenhum campo válido para atualizar');
+        throw new Error('Nenhum campo para atualizar');
       }
       
-      // ✅ CORREÇÃO 3: Query limpa sem duplicações
+      updateFields.push('updated_at = CURRENT_TIMESTAMP');
+      values.push(id);
+      
       const updateQuery = `
         UPDATE Clinicas 
-        SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP
+        SET ${updateFields.join(', ')}
         WHERE id = ?
       `;
       
-      values.push(id);
-      
-      console.log('🔧 Query de atualização:', updateQuery);
-      console.log('🔧 Valores:', values);
+      console.log('🔧 Atualizando clínica ID:', id);
+      console.log('📋 Campos a atualizar:', updateFields);
+      console.log('📋 Valores:', values);
       
       const result = await query(updateQuery, values);
       
       if (result.affectedRows === 0) {
-        console.log('⚠️  Nenhuma linha afetada na atualização');
-        return null;
+        return null; // Clínica não encontrada
       }
       
       console.log('✅ Clínica atualizada com sucesso');
@@ -167,29 +252,29 @@ export class ClinicaModel {
     }
   }
   
-  // Buscar clínica por ID (apenas dados da clínica)
+  // Buscar clínica por ID (versão simples, sem responsáveis técnicos)
   private static async findByIdSimple(id: number): Promise<Clinica | null> {
     try {
       const selectQuery = `SELECT * FROM Clinicas WHERE id = ?`;
       const result = await query(selectQuery, [id]);
-      return result.length > 0 ? result[0] : null;
+      return result.length > 0 ? processContactData(result[0]) : null;
     } catch (error) {
-      console.error('Erro ao buscar clínica:', error);
+      console.error('Erro ao buscar clínica por ID:', error);
       throw new Error('Erro ao buscar clínica');
     }
   }
   
   // Verificar se código já existe
   static async checkCodeExists(codigo: string, excludeId?: number): Promise<boolean> {
+    let checkQuery = `SELECT id FROM Clinicas WHERE codigo = ?`;
+    let params: any[] = [codigo];
+    
+    if (excludeId) {
+      checkQuery += ` AND id != ?`;
+      params.push(excludeId);
+    }
+    
     try {
-      let checkQuery = `SELECT id FROM Clinicas WHERE codigo = ?`;
-      let params: any[] = [codigo];
-      
-      if (excludeId) {
-        checkQuery += ` AND id != ?`;
-        params.push(excludeId);
-      }
-      
       const result = await query(checkQuery, params);
       return result.length > 0;
     } catch (error) {
@@ -200,15 +285,15 @@ export class ClinicaModel {
   
   // Verificar se usuário já existe
   static async checkUserExists(usuario: string, excludeId?: number): Promise<boolean> {
+    let checkQuery = `SELECT id FROM Clinicas WHERE usuario = ?`;
+    let params: any[] = [usuario];
+    
+    if (excludeId) {
+      checkQuery += ` AND id != ?`;
+      params.push(excludeId);
+    }
+    
     try {
-      let checkQuery = `SELECT id FROM Clinicas WHERE usuario = ?`;
-      let params: any[] = [usuario];
-      
-      if (excludeId) {
-        checkQuery += ` AND id != ?`;
-        params.push(excludeId);
-      }
-      
       const result = await query(checkQuery, params);
       return result.length > 0;
     } catch (error) {
