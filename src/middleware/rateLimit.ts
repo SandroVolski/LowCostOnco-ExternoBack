@@ -73,7 +73,7 @@ export const rateLimit = (maxRequests: number = MAX_REQUESTS_PER_WINDOW) => {
 export const strictRateLimit = rateLimit(MAX_REQUESTS_PER_WINDOW_STRICT);
 
 // Rate limiting específico para uploads
-export const uploadRateLimit = rateLimit(10); // Máximo 10 uploads por minuto
+export const uploadRateLimit = rateLimit(50); // Máximo 50 uploads por minuto
 
 // Função para obter estatísticas de rate limiting
 export const getRateLimitStats = () => {

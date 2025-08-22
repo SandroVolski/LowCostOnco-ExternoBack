@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { PacienteModel } from '../models/Paciente';
 import { PacienteCreateInput, PacienteUpdateInput, ApiResponse } from '../types';
+import { invalidateCache } from '../middleware/cache';
 
 export class PacienteController {
   
@@ -116,25 +117,27 @@ export class PacienteController {
     try {
       const pacienteData: PacienteCreateInput = req.body;
       
-      // Validações básicas
-      if (!pacienteData.Paciente_Nome || !pacienteData.Codigo || !pacienteData.Data_Nascimento) {
+      // Validações básicas (Codigo tornou-se opcional)
+      if (!pacienteData.Paciente_Nome || !pacienteData.Data_Nascimento || !pacienteData.Cid_Diagnostico || !pacienteData.Sexo || !pacienteData.stage || !pacienteData.treatment || !pacienteData.status) {
         const response: ApiResponse = {
           success: false,
-          message: 'Campos obrigatórios: Paciente_Nome, Codigo, Data_Nascimento'
+          message: 'Campos obrigatórios: Paciente_Nome, Data_Nascimento, Sexo, Cid_Diagnostico, stage, treatment, status'
         };
         res.status(400).json(response);
         return;
       }
       
-      // Verificar se código já existe
-      const codigoExists = await PacienteModel.checkCodigoExists(pacienteData.Codigo);
-      if (codigoExists) {
-        const response: ApiResponse = {
-          success: false,
-          message: 'Já existe um paciente com este código'
-        };
-        res.status(400).json(response);
-        return;
+      // Verificar se código já existe (apenas se informado)
+      if (pacienteData.Codigo) {
+        const codigoExists = await PacienteModel.checkCodigoExists(pacienteData.Codigo);
+        if (codigoExists) {
+          const response: ApiResponse = {
+            success: false,
+            message: 'Já existe um paciente com este código'
+          };
+          res.status(400).json(response);
+          return;
+        }
       }
       
       // Verificar se CPF já existe (se fornecido)
@@ -151,6 +154,9 @@ export class PacienteController {
       }
       
       const novoPaciente = await PacienteModel.create(pacienteData);
+      
+      // Invalida cache de listagens de pacientes
+      invalidateCache('/api/pacientes');
       
       const response: ApiResponse = {
         success: true,
@@ -224,6 +230,9 @@ export class PacienteController {
       
       const pacienteAtualizado = await PacienteModel.update(id, pacienteData);
       
+      // Invalida cache de listagens de pacientes
+      invalidateCache('/api/pacientes');
+      
       const response: ApiResponse = {
         success: true,
         message: 'Paciente atualizado com sucesso',
@@ -270,6 +279,8 @@ export class PacienteController {
       const deleted = await PacienteModel.delete(id);
       
       if (deleted) {
+        // Invalida cache de listagens de pacientes
+        invalidateCache('/api/pacientes');
         const response: ApiResponse = {
           success: true,
           message: 'Paciente deletado com sucesso'

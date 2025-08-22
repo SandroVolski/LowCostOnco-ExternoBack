@@ -35,16 +35,58 @@ const convertDateToMySQL = (dateStr: string): string => {
 const isDevelopmentEnv = (process.env.NODE_ENV || 'development') !== 'production';
 const logDev = (...args: any[]) => { if (isDevelopmentEnv) console.log(...args); };
 
+const ALLOWED_SEX: Array<'Masculino' | 'Feminino'> = ['Masculino', 'Feminino'];
+const ALLOWED_STATUS: Array<'Em tratamento' | 'Em remissão' | 'Alta' | 'Óbito'> = ['Em tratamento', 'Em remissão', 'Alta', 'Óbito'];
+
+const normalizeSexo = (sexo: string | undefined): 'Masculino' | 'Feminino' | '' => {
+  if (!sexo) return '';
+  const s = (sexo || '').toString().trim().toLowerCase();
+  if (s.startsWith('m')) return 'Masculino';
+  if (s.startsWith('f')) return 'Feminino';
+  return '';
+};
+
+const normalizeStatus = (status: string | undefined): 'Em tratamento' | 'Em remissão' | 'Alta' | 'Óbito' | '' => {
+  if (!status) return '';
+  const s = (status || '').toString().trim().toLowerCase();
+  if (s.includes('remiss')) return 'Em remissão';
+  if (s.includes('alta')) return 'Alta';
+  if (s.includes('óbito') || s.includes('obito')) return 'Óbito';
+  if (s.includes('trat')) return 'Em tratamento';
+  return '';
+};
+
+const normalizeCep = (cep: string | undefined): string | undefined => {
+  if (!cep) return undefined;
+  const digits = cep.replace(/\D/g, '');
+  if (digits.length >= 8) {
+    const d8 = digits.slice(0, 8);
+    return `${d8.substring(0, 5)}-${d8.substring(5)}`;
+  }
+  return cep;
+};
+
+const resolveIdByName = async (table: 'Operadoras' | 'Prestadores', nameOrId: number | string | undefined, defaultId: number = 1): Promise<number> => {
+  if (nameOrId === undefined || nameOrId === null) return defaultId;
+  if (typeof nameOrId === 'number') return nameOrId;
+  const name = nameOrId.toString().trim();
+  if (name === '') return defaultId;
+  // Tenta buscar por nome
+  const rows = await query(`SELECT id FROM ${table} WHERE nome = ? LIMIT 1`, [name]);
+  if (rows && rows.length > 0) {
+    return rows[0].id;
+  }
+  // Cria se não existe
+  const insert = await query(`INSERT INTO ${table} (nome) VALUES (?)`, [name]);
+  return insert.insertId || defaultId;
+};
+
 // Função auxiliar para validar dados obrigatórios
 const validatePacienteData = (data: PacienteCreateInput): string[] => {
   const errors: string[] = [];
   
   if (!data.Paciente_Nome?.trim()) {
     errors.push('Nome do paciente é obrigatório');
-  }
-  
-  if (!data.Codigo?.trim()) {
-    errors.push('Código do paciente é obrigatório');
   }
   
   if (!data.Data_Nascimento) {
@@ -60,8 +102,22 @@ const validatePacienteData = (data: PacienteCreateInput): string[] => {
     errors.push('CID do diagnóstico é obrigatório');
   }
   
-  if (!data.Sexo?.trim()) {
-    errors.push('Sexo é obrigatório');
+  const sexo = normalizeSexo(data.Sexo);
+  if (!sexo) {
+    errors.push('Sexo deve ser Masculino ou Feminino');
+  }
+
+  if (!data.stage?.trim()) {
+    errors.push('Stage é obrigatório');
+  }
+
+  if (!data.treatment?.trim()) {
+    errors.push('Treatment é obrigatório');
+  }
+
+  const normalizedStatus = normalizeStatus(data.status);
+  if (!normalizedStatus) {
+    errors.push('Status inválido. Use Em tratamento/Em remissão/Alta/Óbito');
   }
   
   return errors;
@@ -225,10 +281,15 @@ export class PacienteModel {
         throw new Error(`Dados inválidos: ${validationErrors.join(', ')}`);
     }
     
+    // Resolver Operadora e Prestador
+    const operadoraId = await resolveIdByName('Operadoras', pacienteData.Operadora, 1);
+    const prestadorId = await resolveIdByName('Prestadores', pacienteData.Prestador, 1);
+    
     // Converter e validar datas
     const dataNascimento = convertDateToMySQL(pacienteData.Data_Nascimento);
+    const inicioTratamento = pacienteData.Data_Inicio_Tratamento || pacienteData.Data_Primeira_Solicitacao;
     const dataPrimeiraSolicitacao = convertDateToMySQL(
-        pacienteData.Data_Primeira_Solicitacao || new Date().toISOString().split('T')[0]
+        inicioTratamento || new Date().toISOString().split('T')[0]
     );
     
     if (!dataNascimento) {
@@ -239,29 +300,46 @@ export class PacienteModel {
         throw new Error('Data da primeira solicitação inválida');
     }
     
+    const sexo = normalizeSexo(pacienteData.Sexo);
+    const normalizedStatusRaw = normalizeStatus(pacienteData.status);
+    const normalizedStatus = normalizedStatusRaw || 'Em tratamento';
+
+    // Normalizações opcionais
+    const cep = normalizeCep(pacienteData.endereco_cep);
+
+    const codigoValue = typeof pacienteData.Codigo === 'string' && pacienteData.Codigo.trim() === ''
+      ? null
+      : (pacienteData.Codigo !== undefined ? pacienteData.Codigo : null);
+    
     logDev('🔧 Datas convertidas:', {
         dataNascimento,
         dataPrimeiraSolicitacao
     });
     
+    const insertColumns = [
+      'clinica_id', 'Paciente_Nome', 'Operadora', 'Prestador', 'Codigo',
+      'Data_Nascimento', 'Sexo', 'Cid_Diagnostico', 'Data_Primeira_Solicitacao',
+      'cpf', 'rg', 'telefone', 'endereco', 'email', 'nome_responsavel',
+      'telefone_responsavel', 'plano_saude', 'abrangencia', 'numero_carteirinha',
+      'status', 'observacoes', 'stage', 'treatment', 'peso', 'altura', 'setor_prestador',
+      'contato_emergencia_nome', 'contato_emergencia_telefone',
+      'endereco_rua', 'endereco_numero', 'endereco_complemento', 'endereco_bairro',
+      'endereco_cidade', 'endereco_estado', 'endereco_cep'
+    ];
+    const placeholders = insertColumns.map(() => '?').join(', ');
     const insertQuery = `
-        INSERT INTO Pacientes_Clinica (
-        clinica_id, Paciente_Nome, Operadora, Prestador, Codigo, 
-        Data_Nascimento, Sexo, Cid_Diagnostico, Data_Primeira_Solicitacao,
-        cpf, rg, telefone, endereco, email, nome_responsavel, 
-        telefone_responsavel, plano_saude, numero_carteirinha, 
-        status, observacoes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO Pacientes_Clinica (${insertColumns.join(', ')})
+      VALUES (${placeholders})
     `;
     
     const values = [
         pacienteData.clinica_id || 1, // Valor padrão se não fornecido
         pacienteData.Paciente_Nome,
-        pacienteData.Operadora || 1, // Valor padrão se não fornecido
-        pacienteData.Prestador || 1, // Valor padrão se não fornecido
-        pacienteData.Codigo,
+        operadoraId,
+        prestadorId,
+        codigoValue,
         dataNascimento, // Data já convertida
-        pacienteData.Sexo,
+        sexo,
         pacienteData.Cid_Diagnostico,
         dataPrimeiraSolicitacao, // Data já convertida
         pacienteData.cpf || null,
@@ -272,9 +350,24 @@ export class PacienteModel {
         pacienteData.nome_responsavel || null,
         pacienteData.telefone_responsavel || null,
         pacienteData.plano_saude || null,
+        pacienteData.abrangencia || null,
         pacienteData.numero_carteirinha || null,
-        pacienteData.status || 'ativo',
-        pacienteData.observacoes || null
+        normalizedStatus,
+        pacienteData.observacoes || null,
+        pacienteData.stage,
+        pacienteData.treatment,
+        pacienteData.peso ?? null,
+        pacienteData.altura ?? null,
+        pacienteData.setor_prestador || null,
+        pacienteData.contato_emergencia_nome || null,
+        pacienteData.contato_emergencia_telefone || null,
+        pacienteData.endereco_rua || null,
+        pacienteData.endereco_numero || null,
+        pacienteData.endereco_complemento || null,
+        pacienteData.endereco_bairro || null,
+        pacienteData.endereco_cidade || null,
+        pacienteData.endereco_estado || null,
+        cep || null
     ];
     
     logDev('🔧 Valores finais para inserção:', values);
@@ -285,7 +378,21 @@ export class PacienteModel {
         
         logDev('✅ Paciente criado com ID:', insertId);
         
-        // Buscar o paciente recém-criado
+      // Criar notificação de novo paciente (não bloquear fluxo em caso de erro)
+      try {
+        await query(
+          `INSERT INTO notificacoes (clinica_id, tipo, titulo, mensagem, paciente_id)
+           VALUES (?, 'patient_created', 'Novo paciente cadastrado', ?, ?)`,
+          [
+            pacienteData.clinica_id || 1,
+            `Paciente ${pacienteData.Paciente_Nome} foi cadastrado`,
+            insertId
+          ]
+        );
+      } catch (e) {
+        console.warn('⚠️ Falha ao criar notificação patient_created:', (e as any)?.message || e);
+      }
+
         const newPaciente = await this.findById(insertId);
         if (!newPaciente) {
         throw new Error('Erro ao buscar paciente recém-criado');
@@ -294,17 +401,54 @@ export class PacienteModel {
         return newPaciente;
     } catch (error) {
         console.error('❌ Erro ao criar paciente:', error);
-        throw new Error('Erro ao criar paciente');
+      const message = (error as any)?.message || 'Erro ao criar paciente';
+      throw new Error(message);
     }
     }
   
   // Atualizar paciente
   static async update(id: number, pacienteData: PacienteUpdateInput): Promise<Paciente | null> {
+    // Pré-processar dados (normalizações, resoluções e conversões)
+    const dataToUpdate: any = { ...pacienteData };
+
+    if (dataToUpdate.Data_Inicio_Tratamento && !dataToUpdate.Data_Primeira_Solicitacao) {
+      const conv = convertDateToMySQL(dataToUpdate.Data_Inicio_Tratamento);
+      if (conv) dataToUpdate.Data_Primeira_Solicitacao = conv;
+      delete dataToUpdate.Data_Inicio_Tratamento;
+    }
+
+    if (dataToUpdate.Data_Nascimento) {
+      const conv = convertDateToMySQL(dataToUpdate.Data_Nascimento);
+      if (conv) dataToUpdate.Data_Nascimento = conv;
+    }
+
+    if (dataToUpdate.endereco_cep) {
+      dataToUpdate.endereco_cep = normalizeCep(dataToUpdate.endereco_cep);
+    }
+
+    if (dataToUpdate.Sexo) {
+      const sx = normalizeSexo(dataToUpdate.Sexo);
+      if (sx) dataToUpdate.Sexo = sx;
+    }
+
+    if (dataToUpdate.status) {
+      const st = normalizeStatus(dataToUpdate.status);
+      if (st) dataToUpdate.status = st;
+    }
+
+    if (dataToUpdate.Operadora !== undefined) {
+      dataToUpdate.Operadora = await resolveIdByName('Operadoras', dataToUpdate.Operadora, 1);
+    }
+
+    if (dataToUpdate.Prestador !== undefined) {
+      dataToUpdate.Prestador = await resolveIdByName('Prestadores', dataToUpdate.Prestador, 1);
+    }
+
     // Construir query dinâmica baseada nos campos fornecidos
     const updateFields: string[] = [];
     const values: any[] = [];
     
-    Object.entries(pacienteData).forEach(([key, value]) => {
+    Object.entries(dataToUpdate).forEach(([key, value]) => {
       if (value !== undefined) {
         updateFields.push(`${key} = ?`);
         values.push(value);

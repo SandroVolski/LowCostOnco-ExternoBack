@@ -238,6 +238,18 @@ export class ClinicaController {
   // POST /api/clinicas/register - Registrar nova clínica
   static async register(req: Request, res: Response): Promise<void> {
     try {
+      // Proteção: somente desenvolvedores com segredo podem registrar
+      const adminSecretHeader = req.headers['x-admin-secret'] as string | undefined;
+      const expected = process.env.ADMIN_REGISTRATION_SECRET || '';
+      if (!expected || adminSecretHeader !== expected) {
+        const response: ApiResponse = {
+          success: false,
+          message: 'Acesso negado ao registro. Contate o suporte.'
+        };
+        res.status(403).json(response);
+        return;
+      }
+
       const clinicaData: ClinicaCreateInput = req.body;
       
       console.log('🔧 Registrando nova clínica:', clinicaData.nome);

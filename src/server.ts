@@ -6,10 +6,17 @@ import pacienteRoutes from './routes/pacienteRoutes';
 import solicitacaoRoutes from './routes/solicitacaoRoutes';
 import clinicaRoutes from './routes/clinicaRoutes';
 import protocoloRoutes from './routes/protocoloRoutes';
+import notificacaoRoutes from './routes/notificacaoRoutes';
+import authRoutes from './routes/authRoutes';
 import { optionalAuth } from './middleware/auth';
 import { cacheMiddleware, cacheHeaders, getCacheStats } from './middleware/cache';
 import { rateLimit, getRateLimitStats } from './middleware/rateLimit';
 import { performanceMonitor, getPerformanceStats, diagnosePerformanceIssues } from './utils/performance';
+import { enhancedPerformanceMonitor } from './utils/performance-enhanced';
+import performanceRoutes from './routes/performanceRoutes';
+import catalogRoutes from './routes/catalogRoutes';
+import documentoRoutes from './routes/documentoRoutes';
+import ajusteRoutes from './routes/ajusteRoutes';
 
 // Carregar variáveis de ambiente
 dotenv.config();
@@ -17,11 +24,14 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware
+const corsOrigins = process.env.CORS_ORIGIN 
+  ? process.env.CORS_ORIGIN.split(',')
+  : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:8080'];
+
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:8080'], // URLs do frontend
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  origin: corsOrigins,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-Secret', 'x-admin-secret'],
   credentials: true
 }));
 
@@ -44,8 +54,8 @@ app.use('/api/solicitacoes/:id/pdf', (req, res, next) => {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Middleware de monitoramento de performance
-app.use(performanceMonitor);
+// Middleware de monitoramento de performance (avançado)
+app.use(enhancedPerformanceMonitor);
 
 // Middleware de rate limiting global
 app.use(rateLimit());
@@ -58,6 +68,9 @@ app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   next();
 });
+
+// Servir uploads estaticamente
+app.use('/uploads', express.static('uploads'));
 
 // Rota de health check
 app.get('/health', (req, res) => {
@@ -103,8 +116,15 @@ app.get('/api/performance/diagnose', (req, res) => {
 // Rotas da API com cache para GET requests
 app.use('/api/pacientes', optionalAuth, cacheMiddleware(), pacienteRoutes);
 app.use('/api/solicitacoes', optionalAuth, cacheMiddleware(), solicitacaoRoutes);
+// Documentos deve vir antes de /api/clinicas para evitar colisão
+app.use('/api/clinicas/documentos', optionalAuth, cacheMiddleware(), documentoRoutes);
 app.use('/api/clinicas', optionalAuth, cacheMiddleware(), clinicaRoutes);
 app.use('/api/protocolos', optionalAuth, cacheMiddleware(), protocoloRoutes);
+app.use('/api/notificacoes', optionalAuth, cacheMiddleware(), notificacaoRoutes);
+app.use('/api/auth', cacheMiddleware(), authRoutes);
+app.use('/api/catalog', optionalAuth, cacheMiddleware(), catalogRoutes);
+app.use('/api/performance', performanceRoutes);
+app.use('/api/ajustes', ajusteRoutes);
 
 // Rota de teste para verificar conexão com banco
 app.get('/api/test-db', async (req, res) => {
@@ -120,6 +140,16 @@ app.get('/api/test-db', async (req, res) => {
       message: 'Erro ao testar conexão',
       error: error instanceof Error ? error.message : 'Erro desconhecido'
     });
+  }
+});
+
+// Alias raiz para teste de DB
+app.get('/test-db', async (req, res) => {
+  try {
+    const isConnected = await testConnection();
+    res.json({ success: isConnected });
+  } catch (error) {
+    res.status(500).json({ success: false });
   }
 });
 
@@ -189,6 +219,7 @@ const startServer = async () => {
       console.log('   GET    /api/stats');
       console.log('   GET    /api/performance/diagnose');
       console.log('   GET    /api/test-db');
+      console.log('   GET    /test-db');
       console.log('   GET    /api/pacientes');
       console.log('   POST   /api/pacientes');
       console.log('   GET    /api/pacientes/:id');
@@ -205,6 +236,13 @@ const startServer = async () => {
       console.log('   GET    /api/protocolos/:id');
       console.log('   PUT    /api/protocolos/:id');
       console.log('   DELETE /api/protocolos/:id');
+      console.log('   GET    /api/notificacoes');
+      console.log('   POST   /api/notificacoes/:id/lida');
+      console.log('   POST   /api/notificacoes/lidas');
+      console.log('   POST   /api/notificacoes');
+      console.log('   POST   /api/auth/forgot-password');
+      console.log('   GET    /api/catalog/principios-ativos');
+      console.log('   GET    /api/catalog/cid10');
       console.log('\n🎯 Pronto para receber requisições!\n');
     });
     

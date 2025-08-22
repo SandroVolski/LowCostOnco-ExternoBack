@@ -80,6 +80,21 @@ export class SolicitacaoAutorizacaoModel {
       const insertId = result.insertId;
       
       console.log('✅ Solicitação criada com ID:', insertId);
+
+      // Notificação: nova solicitação criada
+      try {
+        await query(
+          `INSERT INTO notificacoes (clinica_id, tipo, titulo, mensagem, solicitacao_id)
+           VALUES (?, 'auth_created', 'Nova solicitação criada', ?, ?)`,
+          [
+            dadosSolicitacao.clinica_id,
+            `Solicitação #${insertId} criada` + (dadosSolicitacao.cliente_nome ? ` para ${dadosSolicitacao.cliente_nome}` : ''),
+            insertId
+          ]
+        );
+      } catch (e) {
+        console.warn('⚠️ Falha ao criar notificação auth_created:', (e as any)?.message || e);
+      }
       
       // Buscar a solicitação recém-criada
       const novaSolicitacao = await this.findById(insertId);
@@ -254,6 +269,13 @@ export class SolicitacaoAutorizacaoModel {
     if (updateFields.length === 0) {
       throw new Error('Nenhum campo para atualizar');
     }
+
+    // Obter status anterior
+    let statusAntigo: string | null = null;
+    try {
+      const before = await query('SELECT status FROM Solicitacoes_Autorizacao WHERE id = ?', [id]);
+      statusAntigo = before?.[0]?.status || null;
+    } catch {}
     
     const updateQuery = `
       UPDATE Solicitacoes_Autorizacao 
@@ -268,6 +290,25 @@ export class SolicitacaoAutorizacaoModel {
       
       if (result.affectedRows === 0) {
         return null; // Solicitação não encontrada
+      }
+
+      // Notificação de mudança de status (se status foi alterado)
+      const idx = updateFields.findIndex(f => f.startsWith('status'));
+      if (idx >= 0) {
+        const statusNovo = values[idx];
+        try {
+          await query(
+            `INSERT INTO notificacoes (clinica_id, tipo, titulo, mensagem, solicitacao_id)
+             VALUES ((SELECT clinica_id FROM Solicitacoes_Autorizacao WHERE id = ?), 'auth_status', 'Solicitação atualizada', ?, ?)`,
+            [
+              id,
+              `Solicitação #${id}` + (statusAntigo ? ` alterou de ${statusAntigo} para ${statusNovo}` : ` agora está em ${statusNovo}`),
+              id
+            ]
+          );
+        } catch (e) {
+          console.warn('⚠️ Falha ao criar notificação auth_status:', (e as any)?.message || e);
+        }
       }
       
       // Buscar a solicitação atualizada
