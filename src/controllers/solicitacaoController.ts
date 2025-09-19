@@ -11,12 +11,17 @@ declare global {
   var pdfCache: Map<string, Buffer> | undefined;
 }
 
+interface AuthRequest extends Request {
+  user?: { id: number; clinicaId?: number; role?: string };
+}
+
 export class SolicitacaoController {
   
   // POST /api/solicitacoes - Criar nova solicitação
-  static async create(req: Request, res: Response): Promise<void> {
+  static async create(req: AuthRequest, res: Response): Promise<void> {
     try {
       const dadosSolicitacao: SolicitacaoCreateInput = req.body;
+      const clinicaId = req.user?.clinicaId || req.user?.id || null;
       
       // Log para debug do paciente_id
       console.log('🔧 Dados recebidos para criação:', {
@@ -42,10 +47,13 @@ export class SolicitacaoController {
         dadosSolicitacao.data_solicitacao = new Date().toISOString().split('T')[0];
       }
       
-      // Garantir que clinica_id seja fornecido (pode vir do token de autenticação)
-      if (!dadosSolicitacao.clinica_id) {
-        dadosSolicitacao.clinica_id = 1; // Valor padrão para testes
+      if (!clinicaId) {
+        const response: ApiResponse = { success: false, message: 'Clínica não identificada no token' };
+        res.status(401).json(response);
+        return;
       }
+      // Forçar clinica_id do token
+      (dadosSolicitacao as any).clinica_id = clinicaId;
       
       // Tratar paciente_id - converter para número ou null
       if (dadosSolicitacao.paciente_id !== undefined && dadosSolicitacao.paciente_id !== null) {
@@ -81,9 +89,10 @@ export class SolicitacaoController {
   }
   
   // GET /api/solicitacoes/:id - Buscar solicitação por ID
-  static async show(req: Request, res: Response): Promise<void> {
+  static async show(req: AuthRequest, res: Response): Promise<void> {
     try {
       const id = parseInt(req.params.id);
+      const clinicaId = req.user?.clinicaId || req.user?.id || null;
       
       if (isNaN(id)) {
         const response: ApiResponse = {
@@ -102,6 +111,12 @@ export class SolicitacaoController {
           message: 'Solicitação não encontrada'
         };
         res.status(404).json(response);
+        return;
+      }
+
+      if (clinicaId && (solicitacao as any).clinica_id !== clinicaId) {
+        const response: ApiResponse = { success: false, message: 'Acesso negado à solicitação' };
+        res.status(403).json(response);
         return;
       }
       
@@ -124,11 +139,12 @@ export class SolicitacaoController {
   }
   
   // GET /api/solicitacoes/clinica/:clinicaId - Buscar solicitações por clínica
-  static async getByClinica(req: Request, res: Response): Promise<void> {
+  static async getByClinica(req: AuthRequest, res: Response): Promise<void> {
     try {
       const clinicaId = parseInt(req.params.clinicaId);
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
+      const tokenClinicaId = req.user?.clinicaId || req.user?.id || null;
       
       if (isNaN(clinicaId)) {
         const response: ApiResponse = {
@@ -136,6 +152,11 @@ export class SolicitacaoController {
           message: 'ID da clínica inválido'
         };
         res.status(400).json(response);
+        return;
+      }
+      if (tokenClinicaId && tokenClinicaId !== clinicaId) {
+        const response: ApiResponse = { success: false, message: 'Acesso negado a outra clínica' };
+        res.status(403).json(response);
         return;
       }
       
@@ -304,10 +325,11 @@ export class SolicitacaoController {
   }
   
   // PUT /api/solicitacoes/:id/status - Atualizar status da solicitação
-  static async updateStatus(req: Request, res: Response): Promise<void> {
+  static async updateStatus(req: AuthRequest, res: Response): Promise<void> {
     try {
       const id = parseInt(req.params.id);
       const dadosAtualizacao: SolicitacaoUpdateInput = req.body;
+      const clinicaId = req.user?.clinicaId || req.user?.id || null;
       
       if (isNaN(id)) {
         const response: ApiResponse = {
@@ -318,6 +340,18 @@ export class SolicitacaoController {
         return;
       }
       
+      const atual = await SolicitacaoAutorizacaoModel.findById(id);
+      if (!atual) {
+        const response: ApiResponse = { success: false, message: 'Solicitação não encontrada' };
+        res.status(404).json(response);
+        return;
+      }
+      if (clinicaId && (atual as any).clinica_id !== clinicaId) {
+        const response: ApiResponse = { success: false, message: 'Acesso negado à solicitação' };
+        res.status(403).json(response);
+        return;
+      }
+
       const solicitacaoAtualizada = await SolicitacaoAutorizacaoModel.updateStatus(id, dadosAtualizacao);
       
       if (!solicitacaoAtualizada) {
@@ -348,9 +382,10 @@ export class SolicitacaoController {
   }
   
   // DELETE /api/solicitacoes/:id - Deletar solicitação
-  static async destroy(req: Request, res: Response): Promise<void> {
+  static async destroy(req: AuthRequest, res: Response): Promise<void> {
     try {
       const id = parseInt(req.params.id);
+      const clinicaId = req.user?.clinicaId || req.user?.id || null;
       
       if (isNaN(id)) {
         const response: ApiResponse = {
@@ -361,6 +396,18 @@ export class SolicitacaoController {
         return;
       }
       
+      const atual = await SolicitacaoAutorizacaoModel.findById(id);
+      if (!atual) {
+        const response: ApiResponse = { success: false, message: 'Solicitação não encontrada' };
+        res.status(404).json(response);
+        return;
+      }
+      if (clinicaId && (atual as any).clinica_id !== clinicaId) {
+        const response: ApiResponse = { success: false, message: 'Acesso negado à solicitação' };
+        res.status(403).json(response);
+        return;
+      }
+
       const deleted = await SolicitacaoAutorizacaoModel.delete(id);
       
       if (deleted) {
@@ -422,11 +469,11 @@ export class SolicitacaoController {
   }
 
   // GET /api/solicitacoes - Listar todas as solicitações
-  static async index(req: Request, res: Response): Promise<void> {
+  static async index(req: AuthRequest, res: Response): Promise<void> {
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
-      const clinicaId = req.query.clinica_id ? parseInt(req.query.clinica_id as string) : null;
+      const clinicaId = req.user?.clinicaId || req.user?.id || (req.query.clinica_id ? parseInt(req.query.clinica_id as string) : null);
       
       let result;
       

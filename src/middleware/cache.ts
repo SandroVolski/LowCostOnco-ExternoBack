@@ -43,6 +43,11 @@ export const cacheMiddleware = (ttl: number = CACHE_TTL) => {
     if (req.method !== 'GET') {
       return next();
     }
+    // Nunca cachear requisições autenticadas (possuem Authorization)
+    const authHeader = req.headers['authorization'];
+    if (authHeader && typeof authHeader === 'string' && authHeader.trim() !== '') {
+      return next();
+    }
     
     // Limpar cache expirado periodicamente
     if (Math.random() < 0.1) { // 10% de chance de limpar
@@ -93,13 +98,17 @@ export const invalidateCache = (pattern?: string): void => {
 
 // Middleware para adicionar headers de cache
 export const cacheHeaders = (req: Request, res: Response, next: NextFunction) => {
-  // Adicionar headers para controle de cache no navegador
-  res.set('Cache-Control', 'private, max-age=300'); // 5 minutos
-  // ETag estável por rota + query (melhor para 304)
-  // Usa um hash simples da URL; em produção, prefira um hash do body
-  const stableTag = Buffer.from((req.originalUrl || req.url)).toString('base64');
-  res.set('ETag', `W/"${stableTag}"`);
-  
+  const authHeader = req.headers['authorization'];
+  if (authHeader && typeof authHeader === 'string' && authHeader.trim() !== '') {
+    // Para respostas autenticadas, evitar cache em navegador e proxies
+    res.set('Cache-Control', 'no-store');
+    res.set('Vary', 'Authorization');
+  } else {
+    // Respostas públicas podem ter cache curto com ETag por URL
+    res.set('Cache-Control', 'private, max-age=300'); // 5 minutos
+    const stableTag = Buffer.from((req.originalUrl || req.url)).toString('base64');
+    res.set('ETag', `W/"${stableTag}"`);
+  }
   next();
 };
 

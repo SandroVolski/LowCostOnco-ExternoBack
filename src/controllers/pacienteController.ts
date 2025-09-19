@@ -3,16 +3,35 @@ import { PacienteModel } from '../models/Paciente';
 import { PacienteCreateInput, PacienteUpdateInput, ApiResponse } from '../types';
 import { invalidateCache } from '../middleware/cache';
 
+interface AuthRequest extends Request {
+  user?: {
+    id: number;
+    clinicaId?: number;
+    role?: string;
+    medicoId?: number;
+  };
+}
+
 export class PacienteController {
   
   // GET /api/pacientes - Listar todos os pacientes
-  static async index(req: Request, res: Response): Promise<void> {
+  static async index(req: AuthRequest, res: Response): Promise<void> {
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
       const search = req.query.search as string || '';
-      
-      const result = await PacienteModel.findAll({ page, limit, search });
+      const clinicaId = req.user?.clinicaId || req.user?.id || null;
+
+      if (!clinicaId) {
+        const response: ApiResponse = {
+          success: false,
+          message: 'Clínica não identificada no token'
+        };
+        res.status(401).json(response);
+        return;
+      }
+
+      const result = await PacienteModel.findByClinicaId(clinicaId, { page, limit, search });
       
       const response: ApiResponse = {
         success: true,
@@ -33,9 +52,10 @@ export class PacienteController {
   }
   
   // GET /api/pacientes/:id - Buscar paciente por ID
-  static async show(req: Request, res: Response): Promise<void> {
+  static async show(req: AuthRequest, res: Response): Promise<void> {
     try {
       const id = parseInt(req.params.id);
+      const clinicaId = req.user?.clinicaId || req.user?.id || null;
       
       if (isNaN(id)) {
         const response: ApiResponse = {
@@ -54,6 +74,15 @@ export class PacienteController {
           message: 'Paciente não encontrado'
         };
         res.status(404).json(response);
+        return;
+      }
+
+      if (clinicaId && paciente.clinica_id !== clinicaId) {
+        const response: ApiResponse = {
+          success: false,
+          message: 'Acesso negado ao paciente solicitado'
+        };
+        res.status(403).json(response);
         return;
       }
       
@@ -76,12 +105,13 @@ export class PacienteController {
   }
   
   // GET /api/pacientes/clinica/:clinicaId - Buscar pacientes por clínica
-  static async getByClinica(req: Request, res: Response): Promise<void> {
+  static async getByClinica(req: AuthRequest, res: Response): Promise<void> {
     try {
       const clinicaId = parseInt(req.params.clinicaId);
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
       const search = req.query.search as string || '';
+      const tokenClinicaId = req.user?.clinicaId || req.user?.id || null;
       
       if (isNaN(clinicaId)) {
         const response: ApiResponse = {
@@ -89,6 +119,15 @@ export class PacienteController {
           message: 'ID da clínica inválido'
         };
         res.status(400).json(response);
+        return;
+      }
+
+      if (tokenClinicaId && tokenClinicaId !== clinicaId) {
+        const response: ApiResponse = {
+          success: false,
+          message: 'Acesso negado aos pacientes de outra clínica'
+        };
+        res.status(403).json(response);
         return;
       }
       
@@ -113,9 +152,22 @@ export class PacienteController {
   }
   
   // POST /api/pacientes - Criar novo paciente
-  static async store(req: Request, res: Response): Promise<void> {
+  static async store(req: AuthRequest, res: Response): Promise<void> {
     try {
       const pacienteData: PacienteCreateInput = req.body;
+      const clinicaId = req.user?.clinicaId || req.user?.id || null;
+
+      if (!clinicaId) {
+        const response: ApiResponse = {
+          success: false,
+          message: 'Clínica não identificada no token'
+        };
+        res.status(401).json(response);
+        return;
+      }
+
+      // Forçar clinica_id do token
+      (pacienteData as any).clinica_id = clinicaId;
       
       // Validações básicas (Codigo tornou-se opcional)
       if (!pacienteData.Paciente_Nome || !pacienteData.Data_Nascimento || !pacienteData.Cid_Diagnostico || !pacienteData.Sexo || !pacienteData.stage || !pacienteData.treatment || !pacienteData.status) {
@@ -177,10 +229,11 @@ export class PacienteController {
   }
   
   // PUT /api/pacientes/:id - Atualizar paciente
-  static async update(req: Request, res: Response): Promise<void> {
+  static async update(req: AuthRequest, res: Response): Promise<void> {
     try {
       const id = parseInt(req.params.id);
       const pacienteData: PacienteUpdateInput = req.body;
+      const clinicaId = req.user?.clinicaId || req.user?.id || null;
       
       if (isNaN(id)) {
         const response: ApiResponse = {
@@ -199,6 +252,15 @@ export class PacienteController {
           message: 'Paciente não encontrado'
         };
         res.status(404).json(response);
+        return;
+      }
+
+      if (clinicaId && pacienteExists.clinica_id !== clinicaId) {
+        const response: ApiResponse = {
+          success: false,
+          message: 'Acesso negado ao paciente solicitado'
+        };
+        res.status(403).json(response);
         return;
       }
       
@@ -252,9 +314,10 @@ export class PacienteController {
   }
   
   // DELETE /api/pacientes/:id - Deletar paciente
-  static async destroy(req: Request, res: Response): Promise<void> {
+  static async destroy(req: AuthRequest, res: Response): Promise<void> {
     try {
       const id = parseInt(req.params.id);
+      const clinicaId = req.user?.clinicaId || req.user?.id || null;
       
       if (isNaN(id)) {
         const response: ApiResponse = {
@@ -273,6 +336,15 @@ export class PacienteController {
           message: 'Paciente não encontrado'
         };
         res.status(404).json(response);
+        return;
+      }
+
+      if (clinicaId && pacienteExists.clinica_id !== clinicaId) {
+        const response: ApiResponse = {
+          success: false,
+          message: 'Acesso negado ao paciente solicitado'
+        };
+        res.status(403).json(response);
         return;
       }
       
@@ -298,6 +370,57 @@ export class PacienteController {
       const response: ApiResponse = {
         success: false,
         message: 'Erro ao deletar paciente',
+        error: error instanceof Error ? error.message : 'Erro desconhecido'
+      };
+      res.status(500).json(response);
+    }
+  }
+
+  // GET /api/mobile/pacientes/medico/:medicoId
+  static async getByMedico(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const medicoId = parseInt(req.params.medicoId);
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+      const search = (req.query.search as string) || '';
+
+      if (isNaN(medicoId)) {
+        const response: ApiResponse = { success: false, message: 'ID do médico inválido' };
+        res.status(400).json(response);
+        return;
+      }
+
+      // Autorização básica: se token possui medicoId e for diferente, negar
+      if (req.user?.medicoId && req.user.medicoId !== medicoId) {
+        const response: ApiResponse = { success: false, message: 'Acesso negado a pacientes de outro médico' };
+        res.status(403).json(response);
+        return;
+      }
+
+      // Reaproveitar model por clínica, assumindo que cada médico pertence a uma clínica.
+      // Em sistemas com relação médico->clínica, obter clinicaId via token.
+      const clinicaId = req.user?.clinicaId || req.user?.id || null;
+      if (!clinicaId) {
+        const response: ApiResponse = { success: false, message: 'Clínica não identificada no token' };
+        res.status(401).json(response);
+        return;
+      }
+
+      // Por ora, usamos findByClinicaId + filtro no nome/código via search.
+      // Se houver coluna Medico_Id em Pacientes_Clinica, ideal criar um método findByMedicoId.
+      const result = await PacienteModel.findByClinicaId(clinicaId, { page, limit, search });
+
+      const response: ApiResponse = {
+        success: true,
+        message: 'Pacientes do médico encontrados com sucesso',
+        data: result
+      };
+      res.json(response);
+    } catch (error) {
+      console.error('Erro ao buscar pacientes do médico:', error);
+      const response: ApiResponse = {
+        success: false,
+        message: 'Erro ao buscar pacientes do médico',
         error: error instanceof Error ? error.message : 'Erro desconhecido'
       };
       res.status(500).json(response);

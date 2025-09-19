@@ -1,5 +1,5 @@
 import express from 'express';
-import { optionalAuth } from '../middleware/auth';
+import { optionalAuth, authenticateToken } from '../middleware/auth';
 import { rateLimit, uploadRateLimit } from '../middleware/rateLimit';
 import { query } from '../config/database';
 import { invalidateCache } from '../middleware/cache';
@@ -42,28 +42,34 @@ const upload = multer({ storage });
 
 // Aplicar autenticação opcional e rate limiting
 // Nota: quando a autenticação do sistema estiver pronta, troque optionalAuth por authenticateToken
-router.use(optionalAuth);
+router.use(authenticateToken);
 router.use(rateLimit());
+
+interface AuthRequest extends express.Request {
+  user?: { id: number; clinicaId?: number; role?: string };
+}
 
 // ===================================================
 // ROTAS PARA DOCUMENTOS DA CLÍNICA
 // ===================================================
 
 // GET - Listar documentos por query (clinica_id)
-router.get('/', async (req, res) => {
+router.get('/', async (req: AuthRequest, res) => {
 	try {
 		// Headers de cache específicos para documentos
 		res.set('Cache-Control', 'private, max-age=60'); // 1 minuto
 		res.set('ETag', `documents-${Date.now()}`);
 		
-		const { clinica_id, status, tipo } = req.query as { clinica_id?: string; status?: string; tipo?: string };
 
-		if (!clinica_id || isNaN(Number(clinica_id))) {
-			return sendResponse(res, false, 'Parâmetro clinica_id inválido', null, 400);
+		const tokenClinicaId = req.user?.clinicaId || req.user?.id;
+		if (!tokenClinicaId) {
+			return sendResponse(res, false, 'Clínica não identificada no token', null, 401);
 		}
 
+		const { status, tipo } = req.query as { status?: string; tipo?: string };
+
 		const conditions: string[] = ['clinica_id = ?'];
-		const params: any[] = [Number(clinica_id)];
+		const params: any[] = [Number(tokenClinicaId)];
 
 		if (status) {
 			conditions.push('status = ?');
@@ -92,7 +98,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET - Listar documentos de uma clínica
-router.get('/clinica/:clinicaId', async (req, res) => {
+router.get('/clinica/:clinicaId', async (req: AuthRequest, res) => {
 	try {
 		// Headers de cache específicos para documentos
 		res.set('Cache-Control', 'private, max-age=60'); // 1 minuto
@@ -105,8 +111,16 @@ router.get('/clinica/:clinicaId', async (req, res) => {
 			return sendResponse(res, false, 'Parâmetro clinicaId inválido', null, 400);
 		}
 
+		const tokenClinicaId = req.user?.clinicaId || req.user?.id;
+		if (!tokenClinicaId) {
+			return sendResponse(res, false, 'Clínica não identificada no token', null, 401);
+		}
+		if (Number(clinicaId) !== Number(tokenClinicaId)) {
+			return sendResponse(res, false, 'Acesso negado aos documentos de outra clínica', null, 403);
+		}
+
 		const conditions: string[] = ['clinica_id = ?'];
-		const params: any[] = [Number(clinicaId)];
+		const params: any[] = [Number(tokenClinicaId)];
 
 		if (status) {
 			conditions.push('status = ?');
@@ -138,7 +152,7 @@ router.get('/clinica/:clinicaId', async (req, res) => {
 });
 
 // GET - Buscar documento por ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (req: AuthRequest, res) => {
 	try {
 		const { id } = req.params as { id: string };
 		if (!id || isNaN(Number(id))) {
@@ -157,7 +171,11 @@ router.get('/:id', async (req, res) => {
 		if (!rows || rows.length === 0) {
 			return sendResponse(res, false, 'Documento não encontrado', null, 404);
 		}
-
+		// Validar propriedade
+		const tokenClinicaId = req.user?.clinicaId || req.user?.id;
+		if (!tokenClinicaId || rows[0].clinica_id !== Number(tokenClinicaId)) {
+			return sendResponse(res, false, 'Acesso negado ao documento solicitado', null, 403);
+		}
 		return sendResponse(res, true, 'Documento encontrado com sucesso', rows[0]);
 	} catch (error) {
 		console.error('Erro ao buscar documento:', error);
@@ -166,7 +184,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // GET - Download do arquivo do documento
-router.get('/:id/download', async (req, res) => {
+router.get('/:id/download', async (req: AuthRequest, res) => {
 	try {
 		const { id } = req.params as { id: string };
 		if (!id || isNaN(Number(id))) {
@@ -182,6 +200,10 @@ router.get('/:id/download', async (req, res) => {
 		const rows: any[] = await query(sql, [Number(id)]);
 		if (!rows || rows.length === 0) {
 			return sendResponse(res, false, 'Documento não encontrado', null, 404);
+		}
+		const tokenClinicaId = req.user?.clinicaId || req.user?.id;
+		if (!tokenClinicaId || rows[0].clinica_id !== Number(tokenClinicaId)) {
+			return sendResponse(res, false, 'Acesso negado ao documento solicitado', null, 403);
 		}
 
 		const doc = rows[0];
@@ -213,10 +235,13 @@ router.get('/:id/download', async (req, res) => {
 });
 
 // POST - Criar novo documento (sem arquivo - apenas metadados)
-router.post('/', async (req, res) => {
+router.post('/', async (req: AuthRequest, res) => {
 	try {
+		const tokenClinicaId = req.user?.clinicaId || req.user?.id;
+		if (!tokenClinicaId) {
+			return sendResponse(res, false, 'Clínica não identificada no token', null, 401);
+		}
 		const {
-			clinica_id,
 			nome,
 			tipo,
 			descricao,
@@ -228,8 +253,8 @@ router.post('/', async (req, res) => {
 			status
 		} = req.body || {};
 
-		if (!clinica_id || !nome || !tipo || !data_envio) {
-			return sendResponse(res, false, 'Campos obrigatórios: clinica_id, nome, tipo, data_envio', null, 400);
+		if (!nome || !tipo || !data_envio) {
+			return sendResponse(res, false, 'Campos obrigatórios: nome, tipo, data_envio', null, 400);
 		}
 		if (!isValidDate(data_envio) || !isValidDate(data_vencimento)) {
 			return sendResponse(res, false, 'Datas devem estar no formato YYYY-MM-DD', null, 400);
@@ -241,7 +266,7 @@ router.post('/', async (req, res) => {
 			'arquivo_tamanho', 'data_envio', 'data_vencimento'
 		];
 		const values: any[] = [
-			clinica_id, nome, tipo, descricao || null, arquivo_url || null, arquivo_nome || null,
+			Number(tokenClinicaId), nome, tipo, descricao || null, arquivo_url || null, arquivo_nome || null,
 			arquivo_tamanho || null, data_envio, data_vencimento || null
 		];
 		if (status) {
@@ -255,8 +280,8 @@ router.post('/', async (req, res) => {
 
 		// Invalidar cache mais específico
 		invalidateCache('/api/clinicas/documentos');
-		invalidateCache(`/api/clinicas/documentos?clinica_id=${clinica_id}`);
-		invalidateCache(`/api/clinicas/documentos/clinica/${clinica_id}`);
+		invalidateCache(`/api/clinicas/documentos?clinica_id=${tokenClinicaId}`);
+		invalidateCache(`/api/clinicas/documentos/clinica/${tokenClinicaId}`);
 
 		return sendResponse(res, true, 'Documento criado com sucesso', { id: result.insertId }, 201);
 	} catch (error) {
@@ -266,7 +291,7 @@ router.post('/', async (req, res) => {
 });
 
 // POST - Upload de documento (multipart/form-data)
-router.post('/upload', uploadRateLimit, upload.single('file'), async (req, res) => {
+router.post('/upload', uploadRateLimit, upload.single('file'), async (req: AuthRequest, res) => {
 	try {
 		let meta: any = {};
 		if (req.body && typeof (req.body as any).documento === 'string') {
@@ -275,7 +300,10 @@ router.post('/upload', uploadRateLimit, upload.single('file'), async (req, res) 
 		}
 		const rawId = meta.id ?? meta.documento_id ?? meta.documentId ?? (req.body as any).id ?? (req.body as any).documento_id ?? (req.body as any).documentId ?? (req.query as any)?.id ?? req.headers['x-document-id'];
 		const idNum = rawId !== undefined && rawId !== null && !isNaN(Number(rawId)) ? Number(rawId) : undefined;
-		const clinica_id = meta.clinica_id ?? (req.body as any).clinica_id;
+		const tokenClinicaId = req.user?.clinicaId || req.user?.id;
+		if (!tokenClinicaId) {
+			return sendResponse(res, false, 'Clínica não identificada no token', null, 401);
+		}
 		const nome = meta.nome ?? (req.body as any).nome;
 		const tipo = meta.tipo ?? (req.body as any).tipo;
 		const descricao = meta.descricao ?? (req.body as any).descricao;
@@ -320,22 +348,22 @@ router.post('/upload', uploadRateLimit, upload.single('file'), async (req, res) 
 			
 			// Invalidar cache mais específico
 			invalidateCache('/api/clinicas/documentos');
-			invalidateCache(`/api/clinicas/documentos?clinica_id=${clinica_id}`);
-			invalidateCache(`/api/clinicas/documentos/clinica/${clinica_id}`);
+			invalidateCache(`/api/clinicas/documentos?clinica_id=${tokenClinicaId}`);
+			invalidateCache(`/api/clinicas/documentos/clinica/${tokenClinicaId}`);
 			
 			return sendResponse(res, true, 'Documento atualizado com sucesso', { id: idNum, ...(hasFile ? { arquivo_url: publicUrl, arquivo_nome: req.file!.originalname, arquivo_tamanho: req.file!.size } : {}) });
 		}
 
 		// INSERT quando id ausente — aqui sim campos obrigatórios
-		if (!clinica_id || !nome || !tipo || !dataEnvioStr) {
-			return sendResponse(res, false, 'Campos obrigatórios: clinica_id, nome, tipo, data_envio', null, 400);
+		if (!nome || !tipo || !dataEnvioStr) {
+			return sendResponse(res, false, 'Campos obrigatórios: nome, tipo, data_envio', null, 400);
 		}
 		if (!hasFile) {
 			return sendResponse(res, false, 'Arquivo não enviado. Use campo "file" no formulário.', null, 400);
 		}
 		const publicUrl = `${req.protocol}://${req.get('host')}/uploads/documentos/${req.file!.filename}`;
 		const columns: string[] = ['clinica_id', 'nome', 'tipo', 'descricao', 'arquivo_url', 'arquivo_nome', 'arquivo_tamanho', 'data_envio', 'data_vencimento'];
-		const values: any[] = [Number(clinica_id), String(nome), String(tipo), (descricao ? String(descricao) : null), publicUrl, req.file!.originalname, req.file!.size, dataEnvioStr, (dataVencStr ? dataVencStr : null)];
+		const values: any[] = [Number(tokenClinicaId), String(nome), String(tipo), (descricao ? String(descricao) : null), publicUrl, req.file!.originalname, req.file!.size, dataEnvioStr, (dataVencStr ? dataVencStr : null)];
 		if (status) { columns.push('status'); values.push(String(status)); }
 		const placeholders = columns.map(() => '?').join(', ');
 		const insertSql = `INSERT INTO clinic_documents (${columns.join(', ')}) VALUES (${placeholders})`;
@@ -343,8 +371,8 @@ router.post('/upload', uploadRateLimit, upload.single('file'), async (req, res) 
 		
 		// Invalidar cache mais específico
 		invalidateCache('/api/clinicas/documentos');
-		invalidateCache(`/api/clinicas/documentos?clinica_id=${clinica_id}`);
-		invalidateCache(`/api/clinicas/documentos/clinica/${clinica_id}`);
+		invalidateCache(`/api/clinicas/documentos?clinica_id=${tokenClinicaId}`);
+		invalidateCache(`/api/clinicas/documentos/clinica/${tokenClinicaId}`);
 		
 		return sendResponse(res, true, 'Documento enviado e criado com sucesso', { id: insertResult.insertId, arquivo_url: publicUrl, arquivo_nome: req.file!.originalname, arquivo_tamanho: req.file!.size }, 201);
 	} catch (error) {
@@ -354,7 +382,7 @@ router.post('/upload', uploadRateLimit, upload.single('file'), async (req, res) 
 });
 
 // PUT - Atualizar documento
-router.put('/:id', async (req, res) => {
+router.put('/:id', async (req: AuthRequest, res) => {
 	try {
 		const { id } = req.params as { id: string };
 		if (!id || isNaN(Number(id))) {
@@ -382,6 +410,17 @@ router.put('/:id', async (req, res) => {
 			return sendResponse(res, false, 'Nenhum campo válido para atualizar', null, 400);
 		}
 
+
+		// Checar propriedade
+		const ownerRows: any[] = await query('SELECT clinica_id FROM clinic_documents WHERE id = ? LIMIT 1', [Number(id)]);
+		const tokenClinicaId = req.user?.clinicaId || req.user?.id;
+		if (!ownerRows || ownerRows.length === 0) {
+			return sendResponse(res, false, 'Documento não encontrado', null, 404);
+		}
+		if (!tokenClinicaId || ownerRows[0].clinica_id !== Number(tokenClinicaId)) {
+			return sendResponse(res, false, 'Acesso negado ao documento solicitado', null, 403);
+		}
+
 		const sql = `UPDATE clinic_documents SET ${updates.join(', ')} WHERE id = ?`;
 		params.push(Number(id));
 		await query(sql, params);
@@ -405,11 +444,21 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE - Deletar documento
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', async (req: AuthRequest, res) => {
 	try {
 		const { id } = req.params as { id: string };
 		if (!id || isNaN(Number(id))) {
 			return sendResponse(res, false, 'Parâmetro id inválido', null, 400);
+		}
+
+		// Checar propriedade
+		const ownerRows: any[] = await query('SELECT clinica_id FROM clinic_documents WHERE id = ? LIMIT 1', [Number(id)]);
+		const tokenClinicaId = req.user?.clinicaId || req.user?.id;
+		if (!ownerRows || ownerRows.length === 0) {
+			return sendResponse(res, false, 'Documento não encontrado', null, 404);
+		}
+		if (!tokenClinicaId || ownerRows[0].clinica_id !== Number(tokenClinicaId)) {
+			return sendResponse(res, false, 'Acesso negado ao documento solicitado', null, 403);
 		}
 
 		const sql = 'DELETE FROM clinic_documents WHERE id = ?';

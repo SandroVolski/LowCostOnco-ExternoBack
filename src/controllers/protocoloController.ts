@@ -5,27 +5,36 @@ import { ProtocoloModel } from '../models/Protocolo';
 import { ProtocoloCreateInput, ProtocoloUpdateInput } from '../types/protocolo';
 import { ApiResponse } from '../types';
 
+interface AuthRequest extends Request {
+  user?: { id: number; clinicaId?: number; role?: string };
+}
+
 export class ProtocoloController {
   
   // POST /api/protocolos - Criar novo protocolo
-  static async create(req: Request, res: Response): Promise<void> {
+  static async create(req: AuthRequest, res: Response): Promise<void> {
     try {
       const dadosProtocolo: ProtocoloCreateInput = req.body;
+      const clinicaId = req.user?.clinicaId || req.user?.id || null;
       
       // Validações básicas
-      if (!dadosProtocolo.nome || !dadosProtocolo.clinica_id) {
+      if (!dadosProtocolo.nome) {
         const response: ApiResponse = {
           success: false,
-          message: 'Campos obrigatórios: nome, clinica_id'
+          message: 'Campo obrigatório: nome'
         };
         res.status(400).json(response);
         return;
       }
       
-      // Garantir que clinica_id seja fornecido
-      if (!dadosProtocolo.clinica_id) {
-        dadosProtocolo.clinica_id = 1; // Valor padrão para testes
+      if (!clinicaId) {
+        const response: ApiResponse = { success: false, message: 'Clínica não identificada no token' };
+        res.status(401).json(response);
+        return;
       }
+
+      // Forçar clinica_id do token
+      (dadosProtocolo as any).clinica_id = clinicaId;
       
       const novoProtocolo = await ProtocoloModel.create(dadosProtocolo);
       
@@ -48,9 +57,10 @@ export class ProtocoloController {
   }
   
   // GET /api/protocolos/:id - Buscar protocolo por ID
-  static async show(req: Request, res: Response): Promise<void> {
+  static async show(req: AuthRequest, res: Response): Promise<void> {
     try {
       const id = parseInt(req.params.id);
+      const clinicaId = req.user?.clinicaId || req.user?.id || null;
       
       if (isNaN(id)) {
         const response: ApiResponse = {
@@ -69,6 +79,12 @@ export class ProtocoloController {
           message: 'Protocolo não encontrado'
         };
         res.status(404).json(response);
+        return;
+      }
+
+      if (clinicaId && (protocolo as any).clinica_id !== clinicaId) {
+        const response: ApiResponse = { success: false, message: 'Acesso negado ao protocolo solicitado' };
+        res.status(403).json(response);
         return;
       }
       
@@ -91,11 +107,12 @@ export class ProtocoloController {
   }
   
   // GET /api/protocolos/clinica/:clinicaId - Buscar protocolos por clínica
-  static async getByClinica(req: Request, res: Response): Promise<void> {
+  static async getByClinica(req: AuthRequest, res: Response): Promise<void> {
     try {
       const clinicaId = parseInt(req.params.clinicaId);
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
+      const tokenClinicaId = req.user?.clinicaId || req.user?.id || null;
       
       if (isNaN(clinicaId)) {
         const response: ApiResponse = {
@@ -103,6 +120,11 @@ export class ProtocoloController {
           message: 'ID da clínica inválido'
         };
         res.status(400).json(response);
+        return;
+      }
+      if (tokenClinicaId && tokenClinicaId !== clinicaId) {
+        const response: ApiResponse = { success: false, message: 'Acesso negado aos protocolos de outra clínica' };
+        res.status(403).json(response);
         return;
       }
       
@@ -127,10 +149,11 @@ export class ProtocoloController {
   }
   
   // PUT /api/protocolos/:id - Atualizar protocolo
-  static async update(req: Request, res: Response): Promise<void> {
+  static async update(req: AuthRequest, res: Response): Promise<void> {
     try {
       const id = parseInt(req.params.id);
       const dadosAtualizacao: ProtocoloUpdateInput = req.body;
+      const clinicaId = req.user?.clinicaId || req.user?.id || null;
       
       if (isNaN(id)) {
         const response: ApiResponse = {
@@ -141,6 +164,18 @@ export class ProtocoloController {
         return;
       }
       
+      const atual = await ProtocoloModel.findById(id);
+      if (!atual) {
+        const response: ApiResponse = { success: false, message: 'Protocolo não encontrado' };
+        res.status(404).json(response);
+        return;
+      }
+      if (clinicaId && (atual as any).clinica_id !== clinicaId) {
+        const response: ApiResponse = { success: false, message: 'Acesso negado ao protocolo solicitado' };
+        res.status(403).json(response);
+        return;
+      }
+
       const protocoloAtualizado = await ProtocoloModel.update(id, dadosAtualizacao);
       
       if (!protocoloAtualizado) {
@@ -171,9 +206,10 @@ export class ProtocoloController {
   }
   
   // DELETE /api/protocolos/:id - Deletar protocolo
-  static async destroy(req: Request, res: Response): Promise<void> {
+  static async destroy(req: AuthRequest, res: Response): Promise<void> {
     try {
       const id = parseInt(req.params.id);
+      const clinicaId = req.user?.clinicaId || req.user?.id || null;
       
       if (isNaN(id)) {
         const response: ApiResponse = {
@@ -184,6 +220,18 @@ export class ProtocoloController {
         return;
       }
       
+      const atual = await ProtocoloModel.findById(id);
+      if (!atual) {
+        const response: ApiResponse = { success: false, message: 'Protocolo não encontrado' };
+        res.status(404).json(response);
+        return;
+      }
+      if (clinicaId && (atual as any).clinica_id !== clinicaId) {
+        const response: ApiResponse = { success: false, message: 'Acesso negado ao protocolo solicitado' };
+        res.status(403).json(response);
+        return;
+      }
+
       const deleted = await ProtocoloModel.delete(id);
       
       if (deleted) {
@@ -279,11 +327,11 @@ export class ProtocoloController {
   }
 
   // GET /api/protocolos - Listar todos os protocolos
-  static async index(req: Request, res: Response): Promise<void> {
+  static async index(req: AuthRequest, res: Response): Promise<void> {
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
-      const clinicaId = req.query.clinica_id ? parseInt(req.query.clinica_id as string) : null;
+      const clinicaId = req.user?.clinicaId || req.user?.id || (req.query.clinica_id ? parseInt(req.query.clinica_id as string) : null);
       
       let result;
       

@@ -151,3 +151,4 @@ export * from './clinic';
 export * from './solicitacao';
 export * from './protocolo';
 export * from './notificacao';
+export * from './operadora';

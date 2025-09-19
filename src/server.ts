@@ -8,15 +8,22 @@ import clinicaRoutes from './routes/clinicaRoutes';
 import protocoloRoutes from './routes/protocoloRoutes';
 import notificacaoRoutes from './routes/notificacaoRoutes';
 import authRoutes from './routes/authRoutes';
-import { optionalAuth } from './middleware/auth';
+import { optionalAuth, authenticateToken } from './middleware/auth';
 import { cacheMiddleware, cacheHeaders, getCacheStats } from './middleware/cache';
 import { rateLimit, getRateLimitStats } from './middleware/rateLimit';
 import { performanceMonitor, getPerformanceStats, diagnosePerformanceIssues } from './utils/performance';
 import { enhancedPerformanceMonitor } from './utils/performance-enhanced';
+import { loggingMiddleware, errorLoggingMiddleware } from './middleware/logging';
 import performanceRoutes from './routes/performanceRoutes';
 import catalogRoutes from './routes/catalogRoutes';
 import documentoRoutes from './routes/documentoRoutes';
 import ajusteRoutes from './routes/ajusteRoutes';
+import operadoraRoutes from './routes/operadoraRoutes';
+import operadoraAuthRoutes from './routes/operadoraAuthRoutes';
+import dashboardRoutes from './routes/dashboardRoutes';
+import logRoutes from './routes/logRoutes';
+import mobileRoutes from './routes/mobileRoutes';
+import analysisRoutes from './routes/analysisRoutes';
 
 // Carregar variáveis de ambiente
 dotenv.config();
@@ -26,14 +33,20 @@ const PORT = process.env.PORT || 3001;
 
 const corsOrigins = process.env.CORS_ORIGIN 
   ? process.env.CORS_ORIGIN.split(',')
-  : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:8080'];
+  : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:8080', 'http://localhost:5050'];
 
-app.use(cors({
+const corsConfig = {
   origin: corsOrigins,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-Secret', 'x-admin-secret'],
-  credentials: true
-}));
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'] as string[],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-Secret', 'x-admin-secret'] as string[],
+  credentials: true,
+  preflightContinue: false,
+  optionsSuccessStatus: 204
+};
+
+app.use(cors(corsConfig));
+// Responder preflight globalmente antes de qualquer auth
+app.options('*', cors(corsConfig));
 
 // ✅ MIDDLEWARE ESPECÍFICO PARA RESOLVER CSP EM PDFs
 app.use('/api/solicitacoes/:id/pdf', (req, res, next) => {
@@ -56,6 +69,9 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Middleware de monitoramento de performance (avançado)
 app.use(enhancedPerformanceMonitor);
+
+// Middleware de logging automático
+app.use(loggingMiddleware);
 
 // Middleware de rate limiting global
 app.use(rateLimit());
@@ -114,20 +130,36 @@ app.get('/api/performance/diagnose', (req, res) => {
 });
 
 // Rotas da API com cache para GET requests
-app.use('/api/pacientes', optionalAuth, cacheMiddleware(), pacienteRoutes);
-app.use('/api/solicitacoes', optionalAuth, cacheMiddleware(), solicitacaoRoutes);
+// Garanta que preflight de /api/mobile não passe pelo auth
+app.use('/api/mobile', (req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(204);
+    return;
+  }
+  next();
+}, authenticateToken, cacheMiddleware(), mobileRoutes);
+
+app.use('/api/pacientes', authenticateToken, cacheMiddleware(), pacienteRoutes);
+app.use('/api/solicitacoes', authenticateToken, cacheMiddleware(), solicitacaoRoutes);
 // Documentos deve vir antes de /api/clinicas para evitar colisão
-app.use('/api/clinicas/documentos', optionalAuth, cacheMiddleware(), documentoRoutes);
-app.use('/api/clinicas', optionalAuth, cacheMiddleware(), clinicaRoutes);
-app.use('/api/protocolos', optionalAuth, cacheMiddleware(), protocoloRoutes);
-app.use('/api/notificacoes', optionalAuth, cacheMiddleware(), notificacaoRoutes);
+app.use('/api/clinicas/documentos', authenticateToken, cacheMiddleware(), documentoRoutes);
+// Rotas de clinicas têm proteção por rota (login/register públicas; profile e demais autenticadas)
+app.use('/api/clinicas', cacheMiddleware(), clinicaRoutes);
+app.use('/api/protocolos', authenticateToken, cacheMiddleware(), protocoloRoutes);
+app.use('/api/notificacoes', authenticateToken, cacheMiddleware(), notificacaoRoutes);
 app.use('/api/auth', cacheMiddleware(), authRoutes);
 app.use('/api/catalog', optionalAuth, cacheMiddleware(), catalogRoutes);
 app.use('/api/performance', performanceRoutes);
-app.use('/api/ajustes', ajusteRoutes);
+app.use('/api/ajustes', authenticateToken, ajusteRoutes);
+app.use('/api/operadoras', cacheMiddleware(), operadoraRoutes);
+app.use('/api/operadora-auth', cacheMiddleware(), operadoraAuthRoutes);
+app.use('/api/dashboard', cacheMiddleware(), dashboardRoutes);
+app.use('/api/logs', logRoutes);
+app.use('/api/analysis', authenticateToken, cacheMiddleware(), analysisRoutes);
 
 // Rota de teste para verificar conexão com banco
 app.get('/api/test-db', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
   try {
     const isConnected = await testConnection();
     res.json({
@@ -174,6 +206,7 @@ app.get('/api', (req, res) => {
 });
 
 // Middleware de tratamento de erros
+app.use(errorLoggingMiddleware);
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Erro não tratado:', err.stack);
   res.status(500).json({
@@ -237,6 +270,7 @@ const startServer = async () => {
       console.log('   PUT    /api/protocolos/:id');
       console.log('   DELETE /api/protocolos/:id');
       console.log('   GET    /api/notificacoes');
+      console.log('   GET    /api/mobile/pacientes/medico/:medicoId');
       console.log('   POST   /api/notificacoes/:id/lida');
       console.log('   POST   /api/notificacoes/lidas');
       console.log('   POST   /api/notificacoes');

@@ -11,12 +11,24 @@ router.post('/register', ClinicaController.register);              // POST /api/
 router.post('/login', ClinicaController.login);                    // POST /api/clinicas/login
 
 // Rotas protegidas (requerem autenticação ou são opcionais para desenvolvimento)
-router.get('/profile', optionalAuth, ClinicaController.getProfile);           // GET /api/clinicas/profile
-router.put('/profile', optionalAuth, ClinicaController.updateProfile);        // PUT /api/clinicas/profile
+router.get('/profile', authenticateToken, ClinicaController.getProfile);           // GET /api/clinicas/profile
+router.put('/profile', authenticateToken, ClinicaController.updateProfile);        // PUT /api/clinicas/profile
 
 // Rotas para responsáveis técnicos
-router.post('/responsaveis', optionalAuth, ClinicaController.addResponsavel);       // POST /api/clinicas/responsaveis
-router.put('/responsaveis/:id', optionalAuth, ClinicaController.updateResponsavel); // PUT /api/clinicas/responsaveis/:id
-router.delete('/responsaveis/:id', optionalAuth, ClinicaController.removeResponsavel); // DELETE /api/clinicas/responsaveis/:id
+router.post('/responsaveis', authenticateToken, ClinicaController.addResponsavel);       // POST /api/clinicas/responsaveis
+router.put('/responsaveis/:id', authenticateToken, ClinicaController.updateResponsavel); // PUT /api/clinicas/responsaveis/:id
+router.delete('/responsaveis/:id', authenticateToken, ClinicaController.removeResponsavel); // DELETE /api/clinicas/responsaveis/:id
+
+// 🆕 ROTAS ADMINISTRATIVAS PARA CRUD COMPLETO
+// Listar todas as clínicas (para administradores)
+router.get('/admin', ClinicaController.getAllClinicas);           // GET /api/clinicas/admin
+// Buscar clínica por ID (para administradores)
+router.get('/admin/:id', ClinicaController.getClinicaById);       // GET /api/clinicas/admin/:id
+// Criar nova clínica (para administradores)
+router.post('/admin', ClinicaController.createClinica);           // POST /api/clinicas/admin
+// Atualizar clínica (para administradores)
+router.put('/admin/:id', ClinicaController.updateClinica);        // PUT /api/clinicas/admin/:id
+// Deletar clínica (para administradores)
+router.delete('/admin/:id', ClinicaController.deleteClinica);     // DELETE /api/clinicas/admin/:id
 
 export default router;

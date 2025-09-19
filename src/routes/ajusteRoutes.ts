@@ -2,7 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
-import { optionalAuth } from '../middleware/auth';
+import { authenticateToken } from '../middleware/auth';
 import { rateLimit, uploadRateLimit } from '../middleware/rateLimit';
 import { query, queryWithLimit } from '../config/database';
 import { invalidateCache } from '../middleware/cache';
@@ -15,8 +15,8 @@ router.use((req, res, next) => {
 	next();
 });
 
-// Autenticação (opcional por enquanto) e rate limit
-router.use(optionalAuth);
+// Autenticação obrigatória e rate limit
+router.use(authenticateToken);
 router.use(rateLimit());
 
 // Configuração de upload para anexos de ajustes
@@ -70,12 +70,13 @@ const parseSort = (sort?: string) => {
 // Listar solicitações (paginado/filtrado)
 // GET /api/ajustes/solicitacoes
 // =============================================================
-router.get('/solicitacoes', async (req, res) => {
+interface AuthRequest extends express.Request { user?: { id: number; clinicaId?: number; role?: string } }
+
+router.get('/solicitacoes', async (req: AuthRequest, res) => {
 	try {
-		const { clinica_id, status, search, medico, especialidade, prioridade, categoria, page, pageSize, sort, tipo } = req.query as any;
-		if (!clinica_id || isNaN(Number(clinica_id))) {
-			return send(res, false, 'Parâmetro clinica_id inválido', null, 400);
-		}
+		const tokenClinicaId = req.user?.clinicaId || req.user?.id;
+		const { status, search, medico, especialidade, prioridade, categoria, page, pageSize, sort, tipo } = req.query as any;
+		if (!tokenClinicaId) return send(res, false, 'Clínica não identificada no token', null, 401);
 		
 		// Validar tipo se fornecido
 		if (tipo && !['corpo_clinico', 'negociacao'].includes(tipo)) {
@@ -86,7 +87,7 @@ router.get('/solicitacoes', async (req, res) => {
 		const { column, direction } = parseSort(sort || 'created_at:desc');
 
 		const conditions: string[] = ['clinica_id = ?'];
-		const params: any[] = [Number(clinica_id)];
+		const params: any[] = [Number(tokenClinicaId)];
 		
 		// Filtrar por tipo se especificado
 		if (tipo) {
@@ -142,7 +143,7 @@ router.get('/solicitacoes', async (req, res) => {
 // Obter uma solicitação (com anexos e histórico)
 // GET /api/ajustes/solicitacoes/:id
 // =============================================================
-router.get('/solicitacoes/:id', async (req, res) => {
+router.get('/solicitacoes/:id', async (req: AuthRequest, res) => {
 	try {
 		const { id } = req.params as any;
 		if (!id || isNaN(Number(id))) return send(res, false, 'Parâmetro id inválido', null, 400);
@@ -150,6 +151,8 @@ router.get('/solicitacoes/:id', async (req, res) => {
 		const rows: any[] = await query(sql, [Number(id)]);
 		if (!rows || rows.length === 0) return send(res, false, 'Solicitação não encontrada', null, 404);
 		const solic = rows[0];
+		const tokenClinicaId = req.user?.clinicaId || req.user?.id;
+		if (!tokenClinicaId || solic.clinica_id !== Number(tokenClinicaId)) return send(res, false, 'Acesso negado', null, 403);
 		const anexosSql = `SELECT id, solicitacao_id, arquivo_url, arquivo_nome, arquivo_tamanho, created_at FROM ajustes_anexos WHERE solicitacao_id = ? ORDER BY id DESC`;
 		const anexos: any[] = await query(anexosSql, [Number(id)]);
 		const histSql = `SELECT id, solicitacao_id, status, comentario, created_at FROM ajustes_historico WHERE solicitacao_id = ? ORDER BY created_at ASC`;
@@ -165,13 +168,12 @@ router.get('/solicitacoes/:id', async (req, res) => {
 // Criar solicitação (corpo clínico ou negociação)
 // POST /api/ajustes/solicitacoes
 // =============================================================
-router.post('/solicitacoes', async (req, res) => {
+router.post('/solicitacoes', async (req: AuthRequest, res) => {
 	try {
-		const { clinica_id, tipo, titulo, descricao, medico, especialidade, prioridade, categoria } = req.body as any;
+		const tokenClinicaId = req.user?.clinicaId || req.user?.id;
+		const { tipo, titulo, descricao, medico, especialidade, prioridade, categoria } = req.body as any;
 		
-		if (!clinica_id || isNaN(Number(clinica_id))) {
-			return send(res, false, 'clinica_id inválido', null, 422);
-		}
+		if (!tokenClinicaId) return send(res, false, 'Clínica não identificada no token', null, 401);
 		
 		if (!tipo || !['corpo_clinico', 'negociacao'].includes(tipo)) {
 			return send(res, false, 'tipo deve ser "corpo_clinico" ou "negociacao"', null, 422);
@@ -191,7 +193,7 @@ router.post('/solicitacoes', async (req, res) => {
 			}
 			// Forçar prioridade/categoria nulos para respeitar constraint
 			sql = `INSERT INTO ajustes_solicitacoes (clinica_id, tipo, titulo, descricao, status, prioridade, categoria, medico, especialidade) VALUES (?, ?, ?, ?, 'pendente', NULL, NULL, ?, ?)`;
-			params = [Number(clinica_id), String(tipo), String(titulo), String(descricao), String(medico), String(especialidade)];
+			params = [Number(tokenClinicaId), String(tipo), String(titulo), String(descricao), String(medico), String(especialidade)];
 		} else if (tipo === 'negociacao') {
 			// Validações específicas para negociação
 			if (!prioridade || !categoria) {
@@ -211,7 +213,7 @@ router.post('/solicitacoes', async (req, res) => {
 			
 			// Forçar medico/especialidade nulos para respeitar constraint
 			sql = `INSERT INTO ajustes_solicitacoes (clinica_id, tipo, titulo, descricao, status, prioridade, categoria, medico, especialidade) VALUES (?, ?, ?, ?, 'pendente', ?, ?, NULL, NULL)`;
-			params = [Number(clinica_id), String(tipo), String(titulo), String(descricao), String(prioridade), String(categoria)];
+			params = [Number(tokenClinicaId), String(tipo), String(titulo), String(descricao), String(prioridade), String(categoria)];
 		}
 		
 		const result: any = await query(sql, params);
@@ -235,16 +237,18 @@ router.post('/solicitacoes', async (req, res) => {
 // Atualizar solicitação (parcial)
 // PUT /api/ajustes/solicitacoes/:id
 // =============================================================
-router.put('/solicitacoes/:id', async (req, res) => {
+router.put('/solicitacoes/:id', async (req: AuthRequest, res) => {
 	try {
 		const { id } = req.params as any;
 		if (!id || isNaN(Number(id))) return send(res, false, 'Parâmetro id inválido', null, 400);
+		const tokenClinicaId = req.user?.clinicaId || req.user?.id;
+		if (!tokenClinicaId) return send(res, false, 'Clínica não identificada no token', null, 401);
 		
 		// Primeiro, obter o tipo da solicitação existente
-		const existingSql = `SELECT tipo FROM ajustes_solicitacoes WHERE id = ? LIMIT 1`;
+		const existingSql = `SELECT tipo, clinica_id FROM ajustes_solicitacoes WHERE id = ? LIMIT 1`;
 		const existingRows: any[] = await query(existingSql, [Number(id)]);
 		if (!existingRows || existingRows.length === 0) return send(res, false, 'Solicitação não encontrada', null, 404);
-		
+		if (existingRows[0].clinica_id !== Number(tokenClinicaId)) return send(res, false, 'Acesso negado', null, 403);
 		const tipo = existingRows[0].tipo;
 		let allowed: string[];
 		
@@ -303,16 +307,19 @@ router.put('/solicitacoes/:id', async (req, res) => {
 // Alterar status (gera histórico)
 // PATCH /api/ajustes/solicitacoes/:id/status
 // =============================================================
-router.patch('/solicitacoes/:id/status', async (req, res) => {
+router.patch('/solicitacoes/:id/status', async (req: AuthRequest, res) => {
 	try {
 		const { id } = req.params as any;
 		const { status, comentario } = req.body as any;
 		if (!id || isNaN(Number(id))) return send(res, false, 'Parâmetro id inválido', null, 400);
 		if (!status) return send(res, false, 'status é obrigatório', null, 422);
+		const tokenClinicaId = req.user?.clinicaId || req.user?.id;
+		if (!tokenClinicaId) return send(res, false, 'Clínica não identificada no token', null, 401);
 		
 		// Obter o tipo da solicitação
-		const rows: any[] = await query(`SELECT status, tipo FROM ajustes_solicitacoes WHERE id = ?`, [Number(id)]);
+		const rows: any[] = await query(`SELECT status, tipo, clinica_id FROM ajustes_solicitacoes WHERE id = ?`, [Number(id)]);
 		if (!rows || rows.length === 0) return send(res, false, 'Solicitação não encontrada', null, 404);
+		if (rows[0].clinica_id !== Number(tokenClinicaId)) return send(res, false, 'Acesso negado', null, 403);
 		
 		const atual = rows[0].status as string;
 		const tipo = rows[0].tipo as string;
@@ -348,15 +355,18 @@ router.patch('/solicitacoes/:id/status', async (req, res) => {
 // Excluir solicitação
 // DELETE /api/ajustes/solicitacoes/:id
 // =============================================================
-router.delete('/solicitacoes/:id', async (req, res) => {
+router.delete('/solicitacoes/:id', async (req: AuthRequest, res) => {
 	try {
 		const { id } = req.params as any;
 		if (!id || isNaN(Number(id))) return send(res, false, 'Parâmetro id inválido', null, 400);
+		const tokenClinicaId = req.user?.clinicaId || req.user?.id;
+		if (!tokenClinicaId) return send(res, false, 'Clínica não identificada no token', null, 401);
 		
 		// Verificar se a solicitação existe e obter o tipo
-		const existingSql = `SELECT tipo FROM ajustes_solicitacoes WHERE id = ? LIMIT 1`;
+		const existingSql = `SELECT tipo, clinica_id FROM ajustes_solicitacoes WHERE id = ? LIMIT 1`;
 		const existingRows: any[] = await query(existingSql, [Number(id)]);
 		if (!existingRows || existingRows.length === 0) return send(res, false, 'Solicitação não encontrada', null, 404);
+		if (existingRows[0].clinica_id !== Number(tokenClinicaId)) return send(res, false, 'Acesso negado', null, 403);
 		
 		const tipo = existingRows[0].tipo as string;
 		
