@@ -44,6 +44,7 @@ export interface Clinica {
   cidade?: string;
   estado?: string;
   cep?: string;
+  operadora_id?: number;
   // Campos antigos (mantidos para compatibilidade)
   telefone?: string;
   email?: string;

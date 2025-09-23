@@ -532,4 +532,41 @@ export class PacienteModel {
       throw new Error('Erro ao verificar CPF');
     }
   }
+
+  // Contar pacientes
+  static async count(where?: any): Promise<number> {
+    try {
+      let queryStr = 'SELECT COUNT(*) as count FROM Pacientes_Clinica';
+      const params: any[] = [];
+
+      if (where) {
+        const conditions = Object.keys(where).map(key => `${key} = ?`).join(' AND ');
+        queryStr += ` WHERE ${conditions}`;
+        params.push(...Object.values(where));
+      }
+
+      const result = await query(queryStr, params);
+      return result[0]?.count || 0;
+    } catch (error) {
+      console.error('Erro ao contar pacientes:', error);
+      return 0;
+    }
+  }
+
+  // Contar pacientes por operadora
+  static async countByOperadora(operadoraId: number): Promise<number> {
+    try {
+      const result = await query(`
+        SELECT COUNT(*) as count
+        FROM Pacientes_Clinica p
+        INNER JOIN Clinicas c ON p.clinica_id = c.id
+        WHERE c.operadora_id = ?
+      `, [operadoraId]);
+
+      return result[0]?.count || 0;
+    } catch (error) {
+      console.error('Erro ao contar pacientes por operadora:', error);
+      return 0;
+    }
+  }
 }

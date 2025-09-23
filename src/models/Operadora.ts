@@ -244,4 +244,55 @@ export class OperadoraModel {
       return true;
     }
   }
+
+  // Buscar dados de performance das operadoras
+  static async getPerformanceData(): Promise<Array<{name: string, solicitacoes: number, aprovacoes: number, taxaAprovacao: number, tempoMedio: number}>> {
+    try {
+      const result = await query(`
+        SELECT 
+          o.nome as name,
+          COUNT(s.id) as solicitacoes,
+          SUM(CASE WHEN s.status = 'aprovada' THEN 1 ELSE 0 END) as aprovacoes,
+          ROUND((SUM(CASE WHEN s.status = 'aprovada' THEN 1 ELSE 0 END) / COUNT(s.id)) * 100, 2) as taxaAprovacao,
+          ROUND(AVG(TIMESTAMPDIFF(HOUR, s.created_at, s.updated_at)), 2) as tempoMedio
+        FROM Operadoras o
+        LEFT JOIN Clinicas c ON o.id = c.operadora_id
+        LEFT JOIN Solicitacoes_Autorizacao s ON c.id = s.clinica_id
+        WHERE o.status = 'ativo'
+        GROUP BY o.id, o.nome
+        ORDER BY solicitacoes DESC
+      `);
+
+      return result.map((row: any) => ({
+        name: row.name,
+        solicitacoes: row.solicitacoes || 0,
+        aprovacoes: row.aprovacoes || 0,
+        taxaAprovacao: row.taxaAprovacao || 0,
+        tempoMedio: row.tempoMedio || 0
+      }));
+    } catch (error) {
+      console.error('Erro ao buscar dados de performance das operadoras:', error);
+      return [];
+    }
+  }
+
+  // Contar operadoras
+  static async count(where?: any): Promise<number> {
+    try {
+      let queryStr = 'SELECT COUNT(*) as count FROM Operadoras';
+      const params: any[] = [];
+
+      if (where) {
+        const conditions = Object.keys(where).map(key => `${key} = ?`).join(' AND ');
+        queryStr += ` WHERE ${conditions}`;
+        params.push(...Object.values(where));
+      }
+
+      const result = await query(queryStr, params);
+      return result[0]?.count || 0;
+    } catch (error) {
+      console.error('Erro ao contar operadoras:', error);
+      return 0;
+    }
+  }
 }

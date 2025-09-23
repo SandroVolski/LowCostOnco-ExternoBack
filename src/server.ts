@@ -24,6 +24,7 @@ import dashboardRoutes from './routes/dashboardRoutes';
 import logRoutes from './routes/logRoutes';
 import mobileRoutes from './routes/mobileRoutes';
 import analysisRoutes from './routes/analysisRoutes';
+import adminRoutes from './routes/adminRoutes';
 
 // Carregar variáveis de ambiente
 dotenv.config();
@@ -153,9 +154,10 @@ app.use('/api/performance', performanceRoutes);
 app.use('/api/ajustes', authenticateToken, ajusteRoutes);
 app.use('/api/operadoras', cacheMiddleware(), operadoraRoutes);
 app.use('/api/operadora-auth', cacheMiddleware(), operadoraAuthRoutes);
-app.use('/api/dashboard', cacheMiddleware(), dashboardRoutes);
+app.use('/api/dashboard', authenticateToken, cacheMiddleware(), dashboardRoutes);
 app.use('/api/logs', logRoutes);
 app.use('/api/analysis', authenticateToken, cacheMiddleware(), analysisRoutes);
+app.use('/api/admin', authenticateToken, cacheMiddleware(), adminRoutes);
 
 // Rota de teste para verificar conexão com banco
 app.get('/api/test-db', async (req, res) => {

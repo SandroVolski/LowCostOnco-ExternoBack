@@ -413,4 +413,24 @@ export class ProtocoloModel {
       throw new Error('Erro ao deletar protocolo');
     }
   }
+
+  // Contar protocolos
+  static async count(where?: any): Promise<number> {
+    try {
+      let queryStr = 'SELECT COUNT(*) as count FROM Protocolos';
+      const params: any[] = [];
+
+      if (where) {
+        const conditions = Object.keys(where).map(key => `${key} = ?`).join(' AND ');
+        queryStr += ` WHERE ${conditions}`;
+        params.push(...Object.values(where));
+      }
+
+      const result = await query(queryStr, params);
+      return result[0]?.count || 0;
+    } catch (error) {
+      console.error('Erro ao contar protocolos:', error);
+      return 0;
+    }
+  }
 } 

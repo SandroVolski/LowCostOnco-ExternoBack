@@ -15,7 +15,34 @@ export class AnalysisController {
     try {
       console.log('🔧 Buscando dados de análise por órgão...');
       
-      // Query para buscar solicitações agrupadas por CID e órgão
+      // Extrair filtros da query
+      const { clinicId, sex, ageMin, ageMax } = req.query;
+      console.log('🔧 Filtros recebidos:', { clinicId, sex, ageMin, ageMax });
+      
+      // Construir query com filtros
+      let whereConditions = ['s.diagnostico_cid IS NOT NULL', "s.diagnostico_cid != ''"];
+      const queryParams: any[] = [];
+      
+      if (clinicId) {
+        whereConditions.push('s.clinica_id = ?');
+        queryParams.push(clinicId);
+      }
+      
+      if (sex) {
+        whereConditions.push('s.sexo = ?');
+        queryParams.push(sex);
+      }
+      
+      if (ageMin) {
+        whereConditions.push('s.idade >= ?');
+        queryParams.push(ageMin);
+      }
+      
+      if (ageMax) {
+        whereConditions.push('s.idade <= ?');
+        queryParams.push(ageMax);
+      }
+      
       const analysisQuery = `
         SELECT 
           s.diagnostico_cid,
@@ -30,15 +57,18 @@ export class AnalysisController {
           s.id as solicitacao_id,
           s.created_at
         FROM Solicitacoes_Autorizacao s
-        WHERE s.diagnostico_cid IS NOT NULL 
-          AND s.diagnostico_cid != ''
+        WHERE ${whereConditions.join(' AND ')}
         ORDER BY s.created_at DESC
         LIMIT 1000
       `;
       
-      const solicitacoes = await query(analysisQuery, []);
+      console.log('🔧 Query final:', analysisQuery);
+      console.log('🔧 Parâmetros:', queryParams);
+      
+      const solicitacoes = await query(analysisQuery, queryParams);
       
       console.log(`📊 ${solicitacoes.length} solicitações encontradas para análise`);
+      console.log('🔧 Primeiras 3 solicitações:', solicitacoes.slice(0, 3));
       
       // Mapeamento de CIDs para órgãos
       const CID_TO_ORGAN_MAP: Record<string, string> = {
@@ -106,12 +136,18 @@ export class AnalysisController {
       
       // Agrupar solicitações por órgão
       const organData: Record<string, any> = {};
+      let processedCount = 0;
       
       solicitacoes.forEach((solicitacao: any) => {
         const cid = solicitacao.diagnostico_cid;
         const organId = CID_TO_ORGAN_MAP[cid];
         
-        if (!organId) return;
+        if (!organId) {
+          console.log(`⚠️ CID não mapeado: ${cid} - ${solicitacao.diagnostico_descricao}`);
+          return;
+        }
+        
+        processedCount++;
         
         if (!organData[organId]) {
           organData[organId] = {
@@ -120,20 +156,32 @@ export class AnalysisController {
             color: ORGAN_INFO[organId as keyof typeof ORGAN_INFO]?.color || 'medical-gray',
             description: ORGAN_INFO[organId as keyof typeof ORGAN_INFO]?.description || 'Sistema corporal',
             patients: 0,
-            cids: new Set(),
-            protocols: new Set(),
+            cids: new Map(), // Mudança: Map para contar ocorrências
+            protocols: new Map(), // Mudança: Map para contar ocorrências
             solicitacoes: []
           };
         }
         
         organData[organId].patients++;
-        organData[organId].cids.add(cid);
+        
+        // Contar CIDs
+        if (organData[organId].cids.has(cid)) {
+          organData[organId].cids.set(cid, organData[organId].cids.get(cid) + 1);
+        } else {
+          organData[organId].cids.set(cid, 1);
+        }
         
         // Criar protocolo baseado na finalidade e medicamentos
         const finalidade = solicitacao.finalidade || 'Não especificado';
         const medicamentos = solicitacao.medicamentos_antineoplasticos || '';
         const protocolo = `${finalidade} - ${medicamentos.split(',')[0] || 'Protocolo'}`;
-        organData[organId].protocols.add(protocolo);
+        
+        // Contar protocolos
+        if (organData[organId].protocols.has(protocolo)) {
+          organData[organId].protocols.set(protocolo, organData[organId].protocols.get(protocolo) + 1);
+        } else {
+          organData[organId].protocols.set(protocolo, 1);
+        }
         
         // Adicionar solicitação (limitado a 10 por órgão)
         if (organData[organId].solicitacoes.length < 10) {
@@ -152,14 +200,32 @@ export class AnalysisController {
         }
       });
       
-      // Converter Sets para Arrays e formatar dados
-      const analysisData = Object.values(organData).map((organ: any) => ({
-        ...organ,
-        cids: Array.from(organ.cids),
-        protocols: Array.from(organ.protocols).slice(0, 5) // Limitar a 5 protocolos
-      }));
+      console.log(`🔧 ${processedCount} solicitações processadas para órgãos`);
+      
+      // Converter Maps para Arrays com contadores e formatar dados
+      const analysisData = Object.values(organData).map((organ: any) => {
+        // Converter CIDs
+        const cidsArray = [];
+        for (const [cid, count] of organ.cids.entries()) {
+          cidsArray.push({ cid, count });
+        }
+        
+        // Converter Protocolos e ordenar
+        const protocolsArray = [];
+        for (const [protocol, count] of organ.protocols.entries()) {
+          protocolsArray.push({ protocol, count });
+        }
+        protocolsArray.sort((a, b) => b.count - a.count);
+        
+        return {
+          ...organ,
+          cids: cidsArray,
+          protocols: protocolsArray.slice(0, 5) // Limitar a 5 protocolos
+        };
+      });
       
       console.log('✅ Dados de análise processados:', analysisData.length, 'órgãos');
+      console.log('🔧 Órgãos encontrados:', analysisData.map(o => `${o.organName} (${o.patients} pacientes)`));
       
       const response: ApiResponse = {
         success: true,
@@ -185,11 +251,44 @@ export class AnalysisController {
     try {
       console.log('🔧 Buscando métricas de análise...');
       
+      // Extrair filtros da query
+      const { clinicId, sex, ageMin, ageMax } = req.query;
+      console.log('🔧 Filtros recebidos para métricas:', { clinicId, sex, ageMin, ageMax });
+      
+      // Construir condições WHERE para filtros
+      let whereConditions = [];
+      const queryParams: any[] = [];
+      
+      if (clinicId) {
+        whereConditions.push('clinica_id = ?');
+        queryParams.push(clinicId);
+      }
+      
+      if (sex) {
+        whereConditions.push('sexo = ?');
+        queryParams.push(sex);
+      }
+      
+      if (ageMin) {
+        whereConditions.push('idade >= ?');
+        queryParams.push(ageMin);
+      }
+      
+      if (ageMax) {
+        whereConditions.push('idade <= ?');
+        queryParams.push(ageMax);
+      }
+      
+      const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+      const whereClauseWithCid = whereConditions.length > 0 
+        ? `WHERE ${whereConditions.join(' AND ')} AND diagnostico_cid IS NOT NULL AND diagnostico_cid != ""`
+        : 'WHERE diagnostico_cid IS NOT NULL AND diagnostico_cid != ""';
+      
       // Buscar métricas em paralelo
       const [solicitacoesResult, protocolosResult, cidsResult] = await Promise.all([
-        query('SELECT COUNT(*) as total FROM Solicitacoes_Autorizacao', []),
+        query(`SELECT COUNT(*) as total FROM Solicitacoes_Autorizacao ${whereClause}`, queryParams),
         query('SELECT COUNT(*) as total FROM Protocolos', []),
-        query('SELECT COUNT(DISTINCT diagnostico_cid) as total FROM Solicitacoes_Autorizacao WHERE diagnostico_cid IS NOT NULL AND diagnostico_cid != ""', [])
+        query(`SELECT COUNT(DISTINCT diagnostico_cid) as total FROM Solicitacoes_Autorizacao ${whereClauseWithCid}`, queryParams)
       ]);
       
       const totalSolicitacoes = solicitacoesResult[0]?.total || 0;
@@ -197,7 +296,7 @@ export class AnalysisController {
       const totalCids = cidsResult[0]?.total || 0;
       
       // Buscar pacientes únicos
-      const pacientesResult = await query('SELECT COUNT(DISTINCT cliente_nome) as total FROM Solicitacoes_Autorizacao', []);
+      const pacientesResult = await query(`SELECT COUNT(DISTINCT cliente_nome) as total FROM Solicitacoes_Autorizacao ${whereClause}`, queryParams);
       const totalPacientes = pacientesResult[0]?.total || 0;
       
       // Buscar sistemas monitorados (órgãos únicos)
@@ -245,6 +344,281 @@ export class AnalysisController {
       const response: ApiResponse = {
         success: false,
         message: 'Erro ao buscar métricas de análise',
+        error: error instanceof Error ? error.message : 'Erro desconhecido'
+      };
+      res.status(500).json(response);
+    }
+  }
+
+  // GET /api/analysis/kpis - Buscar KPIs operacionais
+  static async getOperationalKPIs(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      console.log('🔧 Buscando KPIs operacionais...');
+      
+      // Extrair filtros da query
+      const { clinicId, sex, ageMin, ageMax } = req.query;
+      console.log('🔧 Filtros recebidos para KPIs:', { clinicId, sex, ageMin, ageMax });
+      
+      // Construir condições WHERE para filtros
+      let whereConditions = ['data_solicitacao >= DATE_SUB(NOW(), INTERVAL 30 DAY)'];
+      const queryParams: any[] = [];
+      
+      if (clinicId) {
+        whereConditions.push('clinica_id = ?');
+        queryParams.push(clinicId);
+      }
+      
+      if (sex) {
+        whereConditions.push('sexo = ?');
+        queryParams.push(sex);
+      }
+      
+      if (ageMin) {
+        whereConditions.push('idade >= ?');
+        queryParams.push(ageMin);
+      }
+      
+      if (ageMax) {
+        whereConditions.push('idade <= ?');
+        queryParams.push(ageMax);
+      }
+      
+      const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+      
+      // Taxa de aprovação (últimos 30 dias)
+      const aprovacaoResult = await query(`
+        SELECT 
+          COUNT(*) as total,
+          SUM(CASE WHEN status = 'Aprovado' THEN 1 ELSE 0 END) as aprovados
+        FROM Solicitacoes_Autorizacao 
+        ${whereClause}
+      `, queryParams);
+      
+      const total = aprovacaoResult[0]?.total || 0;
+      const aprovados = aprovacaoResult[0]?.aprovados || 0;
+      const taxaAprovacao = total > 0 ? Math.round((aprovados / total) * 100) : 0;
+      
+      // Tempo médio de aprovação (em horas)
+      const tempoWhereConditions = [...whereConditions, "status = 'Aprovado'", 'updated_at IS NOT NULL'];
+      const tempoResult = await query(`
+        SELECT AVG(TIMESTAMPDIFF(HOUR, data_solicitacao, updated_at)) as tempo_medio
+        FROM Solicitacoes_Autorizacao 
+        WHERE ${tempoWhereConditions.join(' AND ')}
+      `, queryParams);
+      
+      const tempoMedio = Math.round(tempoResult[0]?.tempo_medio || 24);
+      
+      // Custo médio por paciente (baseado em dados reais se existirem, senão 0)
+      const custoResult = await query(`
+        SELECT 
+          COUNT(DISTINCT cliente_nome) as pacientes_unicos,
+          COUNT(*) as total_solicitacoes
+        FROM Solicitacoes_Autorizacao 
+        ${whereClause}
+      `, queryParams);
+      
+      const pacientesUnicos = custoResult[0]?.pacientes_unicos || 1;
+      const totalSolicitacoes = custoResult[0]?.total_solicitacoes || 1;
+      // Remover cálculo de custo simulado - usar 0 até termos dados reais
+      const custoMedio = 0;
+      
+      const kpis = {
+        taxaAprovacao,
+        tempoMedioAprovacao: tempoMedio,
+        custoMedioPorPaciente: custoMedio,
+        totalSolicitacoes30Dias: total,
+        pacientesUnicos30Dias: pacientesUnicos
+      };
+      
+      console.log('✅ KPIs calculados:', kpis);
+      
+      const response: ApiResponse = {
+        success: true,
+        message: 'KPIs operacionais encontrados com sucesso',
+        data: kpis
+      };
+      
+      res.json(response);
+      
+    } catch (error) {
+      console.error('❌ Erro ao buscar KPIs operacionais:', error);
+      const response: ApiResponse = {
+        success: false,
+        message: 'Erro ao buscar KPIs operacionais',
+        error: error instanceof Error ? error.message : 'Erro desconhecido'
+      };
+      res.status(500).json(response);
+    }
+  }
+
+  // GET /api/analysis/charts - Buscar dados para gráficos
+  static async getChartData(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      console.log('🔧 Buscando dados para gráficos...');
+      
+      // Extrair filtros da query
+      const { clinicId, sex, ageMin, ageMax } = req.query;
+      console.log('🔧 Filtros recebidos para gráficos:', { clinicId, sex, ageMin, ageMax });
+      
+      // Construir condições WHERE para filtros
+      let whereConditions = [
+        'medicamentos_antineoplasticos IS NOT NULL',
+        "medicamentos_antineoplasticos != ''",
+        'data_solicitacao >= DATE_SUB(NOW(), INTERVAL 6 MONTH)'
+      ];
+      const queryParams: any[] = [];
+      
+      if (clinicId) {
+        whereConditions.push('clinica_id = ?');
+        queryParams.push(clinicId);
+      }
+      
+      if (sex) {
+        whereConditions.push('sexo = ?');
+        queryParams.push(sex);
+      }
+      
+      if (ageMin) {
+        whereConditions.push('idade >= ?');
+        queryParams.push(ageMin);
+      }
+      
+      if (ageMax) {
+        whereConditions.push('idade <= ?');
+        queryParams.push(ageMax);
+      }
+      
+      const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+      
+      // Dados de medicamentos mais utilizados (agrupados e limpos)
+      const medicamentosResult = await query(`
+        SELECT 
+          medicamentos_antineoplasticos,
+          COUNT(*) as total
+        FROM Solicitacoes_Autorizacao 
+        ${whereClause}
+        GROUP BY medicamentos_antineoplasticos
+        ORDER BY total DESC
+        LIMIT 8
+      `, queryParams);
+      
+      // Processar e limpar dados de medicamentos
+      const medicamentosMap = new Map();
+      
+      medicamentosResult.forEach((row: any) => {
+        const medicamento = row.medicamentos_antineoplasticos.trim();
+        if (medicamento && medicamento !== '') {
+          // Extrair apenas o nome principal do medicamento (antes da primeira vírgula)
+          const nomePrincipal = medicamento.split(',')[0].trim();
+          
+          if (medicamentosMap.has(nomePrincipal)) {
+            medicamentosMap.set(nomePrincipal, medicamentosMap.get(nomePrincipal) + row.total);
+          } else {
+            medicamentosMap.set(nomePrincipal, row.total);
+          }
+        }
+      });
+      
+      // Converter para array e ordenar por quantidade
+      const medicamentos = Array.from(medicamentosMap.entries())
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 6); // Limitar a 6 medicamentos para melhor visualização
+      
+      // Dados de tipos de câncer por órgão
+      const cancerWhereConditions = [
+        'diagnostico_cid IS NOT NULL',
+        "diagnostico_cid != ''",
+        'data_solicitacao >= DATE_SUB(NOW(), INTERVAL 6 MONTH)'
+      ];
+      
+      if (clinicId) {
+        cancerWhereConditions.push('clinica_id = ?');
+      }
+      if (sex) {
+        cancerWhereConditions.push('sexo = ?');
+      }
+      if (ageMin) {
+        cancerWhereConditions.push('idade >= ?');
+      }
+      if (ageMax) {
+        cancerWhereConditions.push('idade <= ?');
+      }
+      
+      const cancerWhereClause = `WHERE ${cancerWhereConditions.join(' AND ')}`;
+      
+      const cancerTypesResult = await query(`
+        SELECT 
+          CASE 
+            WHEN diagnostico_cid IN ('C50.0', 'C50.1', 'C50.2', 'C50.3', 'C50.4', 'C50.5', 'C50.6', 'C50.8', 'C50.9', 'C77.2') THEN 'Mama'
+            WHEN diagnostico_cid IN ('C78.0', 'C34.0', 'C34.1', 'C34.2', 'C34.3', 'C34.8', 'C34.9', 'C78.1', 'C78.2', 'C78.3', 'C78.4', 'C78.5', 'C78.6', 'C78.7', 'C78.8', 'C78.9') THEN 'Pulmão'
+            WHEN diagnostico_cid IN ('C18', 'C19', 'C20', 'C21') THEN 'Colorretal'
+            WHEN diagnostico_cid IN ('C61', 'C77.5') THEN 'Próstata'
+            WHEN diagnostico_cid IN ('C81', 'C82', 'C83', 'C84', 'C85', 'C86', 'C87', 'C88', 'C90', 'C91', 'C92', 'C93', 'C94', 'C95', 'C96') THEN 'Linfomas'
+            ELSE 'Outros'
+          END as tipo_cancer,
+          COUNT(*) as casos
+        FROM Solicitacoes_Autorizacao 
+        ${cancerWhereClause}
+        GROUP BY tipo_cancer
+        ORDER BY casos DESC
+      `, queryParams);
+      
+      // Dados mensais (últimos 6 meses)
+      const monthlyWhereConditions = ['data_solicitacao >= DATE_SUB(NOW(), INTERVAL 6 MONTH)'];
+      if (clinicId) {
+        monthlyWhereConditions.push('clinica_id = ?');
+      }
+      if (sex) {
+        monthlyWhereConditions.push('sexo = ?');
+      }
+      if (ageMin) {
+        monthlyWhereConditions.push('idade >= ?');
+      }
+      if (ageMax) {
+        monthlyWhereConditions.push('idade <= ?');
+      }
+      
+      const monthlyWhereClause = `WHERE ${monthlyWhereConditions.join(' AND ')}`;
+      
+      const monthlyResult = await query(`
+        SELECT 
+          DATE_FORMAT(data_solicitacao, '%Y-%m') as mes,
+          COUNT(*) as solicitacoes,
+          COUNT(DISTINCT cliente_nome) as pacientes_unicos
+        FROM Solicitacoes_Autorizacao 
+        ${monthlyWhereClause}
+        GROUP BY DATE_FORMAT(data_solicitacao, '%Y-%m')
+        ORDER BY mes ASC
+      `, queryParams);
+      
+      const monthlyData = monthlyResult.map((row: any) => ({
+        name: new Date(row.mes + '-01').toLocaleDateString('pt-BR', { month: 'short' }),
+        solicitacoes: row.solicitacoes,
+        patients: row.pacientes_unicos
+      }));
+      
+      const chartData = {
+        medicamentos,
+        cancerTypes: cancerTypesResult,
+        monthlyData
+      };
+      
+      console.log('✅ Dados de gráficos calculados:', chartData);
+      
+      const response: ApiResponse = {
+        success: true,
+        message: 'Dados para gráficos encontrados com sucesso',
+        data: chartData
+      };
+      
+      res.json(response);
+      
+    } catch (error) {
+      console.error('❌ Erro ao buscar dados de gráficos:', error);
+      const response: ApiResponse = {
+        success: false,
+        message: 'Erro ao buscar dados de gráficos',
         error: error instanceof Error ? error.message : 'Erro desconhecido'
       };
       res.status(500).json(response);

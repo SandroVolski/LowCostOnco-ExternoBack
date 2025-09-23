@@ -13,6 +13,7 @@ router.post('/login', ClinicaController.login);                    // POST /api/
 // Rotas protegidas (requerem autenticação ou são opcionais para desenvolvimento)
 router.get('/profile', authenticateToken, ClinicaController.getProfile);           // GET /api/clinicas/profile
 router.put('/profile', authenticateToken, ClinicaController.updateProfile);        // PUT /api/clinicas/profile
+router.get('/por-operadora', authenticateToken, ClinicaController.getClinicasPorOperadora); // GET /api/clinicas/por-operadora
 
 // Rotas para responsáveis técnicos
 router.post('/responsaveis', authenticateToken, ClinicaController.addResponsavel);       // POST /api/clinicas/responsaveis

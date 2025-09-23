@@ -19,6 +19,7 @@ interface AuthRequest extends Request {
     id: number;
     tipo: 'clinica' | 'operadora';
     clinicaId?: number;
+    operadoraId?: number;
   };
 }
 
@@ -907,6 +908,46 @@ export class ClinicaController {
       const response: ApiResponse = {
         success: false,
         message: 'Erro ao deletar clínica',
+        error: error instanceof Error ? error.message : 'Erro desconhecido'
+      };
+      res.status(500).json(response);
+    }
+  }
+
+  // GET /api/clinicas/por-operadora - Buscar clínicas credenciadas por operadora
+  static async getClinicasPorOperadora(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      console.log('🔧 Buscando clínicas por operadora...');
+      
+      const operadoraId = req.user?.operadoraId;
+      
+      if (!operadoraId) {
+        const response: ApiResponse = {
+          success: false,
+          message: 'ID da operadora não encontrado'
+        };
+        res.status(400).json(response);
+        return;
+      }
+
+      // Buscar clínicas específicas da operadora
+      const clinicas = await ClinicaModel.findByOperadoraId(operadoraId);
+      
+      console.log(`✅ Encontradas ${clinicas.length} clínicas para operadora ${operadoraId}`);
+      
+      const response: ApiResponse = {
+        success: true,
+        message: 'Clínicas obtidas com sucesso',
+        data: clinicas
+      };
+      
+      res.json(response);
+      
+    } catch (error) {
+      console.error('❌ Erro ao buscar clínicas por operadora:', error);
+      const response: ApiResponse = {
+        success: false,
+        message: 'Erro ao buscar clínicas',
         error: error instanceof Error ? error.message : 'Erro desconhecido'
       };
       res.status(500).json(response);

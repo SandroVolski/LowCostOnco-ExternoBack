@@ -351,4 +351,268 @@ export class SolicitacaoAutorizacaoModel {
       throw new Error('Erro ao buscar solicitações');
     }
   }
+
+  // Contar solicitações por data específica
+  static async countByDate(date: Date): Promise<number> {
+    try {
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const result = await query(
+        'SELECT COUNT(*) as count FROM Solicitacoes_Autorizacao WHERE created_at >= ? AND created_at <= ?',
+        [startOfDay, endOfDay]
+      );
+
+      return result[0]?.count || 0;
+    } catch (error) {
+      console.error('Erro ao contar solicitações por data:', error);
+      return 0;
+    }
+  }
+
+  // Contar solicitações por período
+  static async countByDateRange(startDate: Date, endDate: Date): Promise<number> {
+    try {
+      const result = await query(
+        'SELECT COUNT(*) as count FROM Solicitacoes_Autorizacao WHERE created_at >= ? AND created_at <= ?',
+        [startDate, endDate]
+      );
+
+      return result[0]?.count || 0;
+    } catch (error) {
+      console.error('Erro ao contar solicitações por período:', error);
+      return 0;
+    }
+  }
+
+  // Calcular tempo médio de resposta
+  static async getTempoMedioResposta(): Promise<number> {
+    try {
+      const result = await query(`
+        SELECT AVG(TIMESTAMPDIFF(HOUR, created_at, updated_at)) as tempo_medio
+        FROM Solicitacoes_Autorizacao 
+        WHERE status IN ('aprovada', 'rejeitada') 
+        AND created_at IS NOT NULL 
+        AND updated_at IS NOT NULL
+      `);
+
+      return result[0]?.tempo_medio || 0;
+    } catch (error) {
+      console.error('Erro ao calcular tempo médio de resposta:', error);
+      return 0;
+    }
+  }
+
+  // Calcular tempo médio de resposta por operadora
+  static async getTempoMedioRespostaByOperadora(operadoraId: number): Promise<number> {
+    try {
+      const result = await query(`
+        SELECT AVG(TIMESTAMPDIFF(HOUR, s.created_at, s.updated_at)) as tempo_medio
+        FROM Solicitacoes_Autorizacao s
+        INNER JOIN Clinicas c ON s.clinica_id = c.id
+        WHERE c.operadora_id = ? 
+        AND s.status IN ('aprovada', 'rejeitada') 
+        AND s.created_at IS NOT NULL 
+        AND s.updated_at IS NOT NULL
+      `, [operadoraId]);
+
+      return result[0]?.tempo_medio || 0;
+    } catch (error) {
+      console.error('Erro ao calcular tempo médio de resposta por operadora:', error);
+      return 0;
+    }
+  }
+
+  // Calcular tempo médio de resposta por clínica
+  static async getTempoMedioRespostaByClinica(clinicaId: number): Promise<number> {
+    try {
+      const result = await query(`
+        SELECT AVG(TIMESTAMPDIFF(HOUR, created_at, updated_at)) as tempo_medio
+        FROM Solicitacoes_Autorizacao 
+        WHERE clinica_id = ? 
+        AND status IN ('aprovada', 'rejeitada') 
+        AND created_at IS NOT NULL 
+        AND updated_at IS NOT NULL
+      `, [clinicaId]);
+
+      return result[0]?.tempo_medio || 0;
+    } catch (error) {
+      console.error('Erro ao calcular tempo médio de resposta por clínica:', error);
+      return 0;
+    }
+  }
+
+  // Buscar distribuição de status
+  static async getStatusDistribution(): Promise<Array<{name: string, value: number, color: string}>> {
+    try {
+      const result = await query(`
+        SELECT 
+          status,
+          COUNT(*) as count
+        FROM Solicitacoes_Autorizacao 
+        GROUP BY status
+      `);
+
+      const colors = {
+        'pendente': '#f59e0b',
+        'aprovada': '#10b981',
+        'rejeitada': '#ef4444',
+        'em_analise': '#3b82f6'
+      };
+
+      return result.map((row: any) => ({
+        name: row.status,
+        value: row.count,
+        color: colors[row.status as keyof typeof colors] || '#6b7280'
+      }));
+    } catch (error) {
+      console.error('Erro ao buscar distribuição de status:', error);
+      return [];
+    }
+  }
+
+  // Buscar solicitações por mês
+  static async getSolicitacoesPorMes(months: number): Promise<Array<{mes: string, solicitacoes: number, aprovacoes: number, rejeicoes: number, pendentes: number}>> {
+    try {
+      const result = await query(`
+        SELECT 
+          DATE_FORMAT(created_at, '%Y-%m') as mes,
+          COUNT(*) as solicitacoes,
+          SUM(CASE WHEN status = 'aprovada' THEN 1 ELSE 0 END) as aprovacoes,
+          SUM(CASE WHEN status = 'rejeitada' THEN 1 ELSE 0 END) as rejeicoes,
+          SUM(CASE WHEN status = 'pendente' THEN 1 ELSE 0 END) as pendentes
+        FROM Solicitacoes_Autorizacao 
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? MONTH)
+        GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+        ORDER BY mes
+      `, [months]);
+
+      return result.map((row: any) => ({
+        mes: row.mes,
+        solicitacoes: row.solicitacoes,
+        aprovacoes: row.aprovacoes,
+        rejeicoes: row.rejeicoes,
+        pendentes: row.pendentes
+      }));
+    } catch (error) {
+      console.error('Erro ao buscar solicitações por mês:', error);
+      return [];
+    }
+  }
+
+  // Buscar dados de tendência
+  static async getTrendData(months: number): Promise<Array<{periodo: string, solicitacoes: number, aprovacoes: number, taxaAprovacao: number}>> {
+    try {
+      const result = await query(`
+        SELECT 
+          DATE_FORMAT(created_at, '%Y-%m') as periodo,
+          COUNT(*) as solicitacoes,
+          SUM(CASE WHEN status = 'aprovada' THEN 1 ELSE 0 END) as aprovacoes,
+          ROUND((SUM(CASE WHEN status = 'aprovada' THEN 1 ELSE 0 END) / COUNT(*)) * 100, 2) as taxaAprovacao
+        FROM Solicitacoes_Autorizacao 
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? MONTH)
+        GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+        ORDER BY periodo
+      `, [months]);
+
+      return result.map((row: any) => ({
+        periodo: row.periodo,
+        solicitacoes: row.solicitacoes,
+        aprovacoes: row.aprovacoes,
+        taxaAprovacao: row.taxaAprovacao || 0
+      }));
+    } catch (error) {
+      console.error('Erro ao buscar dados de tendência:', error);
+      return [];
+    }
+  }
+
+  // Contar solicitações por operadora
+  static async countByOperadora(operadoraId: number): Promise<number> {
+    try {
+      const result = await query(`
+        SELECT COUNT(*) as count
+        FROM Solicitacoes_Autorizacao s
+        INNER JOIN Clinicas c ON s.clinica_id = c.id
+        WHERE c.operadora_id = ?
+      `, [operadoraId]);
+
+      return result[0]?.count || 0;
+    } catch (error) {
+      console.error('Erro ao contar solicitações por operadora:', error);
+      return 0;
+    }
+  }
+
+  // Contar solicitações por operadora e status
+  static async countByOperadoraAndStatus(operadoraId: number, status: string): Promise<number> {
+    try {
+      const result = await query(`
+        SELECT COUNT(*) as count
+        FROM Solicitacoes_Autorizacao s
+        INNER JOIN Clinicas c ON s.clinica_id = c.id
+        WHERE c.operadora_id = ? AND s.status = ?
+      `, [operadoraId, status]);
+
+      return result[0]?.count || 0;
+    } catch (error) {
+      console.error('Erro ao contar solicitações por operadora e status:', error);
+      return 0;
+    }
+  }
+
+  // Contar solicitações por clínica
+  static async countByClinica(clinicaId: number): Promise<number> {
+    try {
+      const result = await query(`
+        SELECT COUNT(*) as count
+        FROM Solicitacoes_Autorizacao
+        WHERE clinica_id = ?
+      `, [clinicaId]);
+
+      return result[0]?.count || 0;
+    } catch (error) {
+      console.error('Erro ao contar solicitações por clínica:', error);
+      return 0;
+    }
+  }
+
+  // Contar solicitações por clínica e status
+  static async countByClinicaAndStatus(clinicaId: number, status: string): Promise<number> {
+    try {
+      const result = await query(`
+        SELECT COUNT(*) as count
+        FROM Solicitacoes_Autorizacao
+        WHERE clinica_id = ? AND status = ?
+      `, [clinicaId, status]);
+
+      return result[0]?.count || 0;
+    } catch (error) {
+      console.error('Erro ao contar solicitações por clínica e status:', error);
+      return 0;
+    }
+  }
+
+  // Contar solicitações
+  static async count(where?: any): Promise<number> {
+    try {
+      let queryStr = 'SELECT COUNT(*) as count FROM Solicitacoes_Autorizacao';
+      const params: any[] = [];
+
+      if (where) {
+        const conditions = Object.keys(where).map(key => `${key} = ?`).join(' AND ');
+        queryStr += ` WHERE ${conditions}`;
+        params.push(...Object.values(where));
+      }
+
+      const result = await query(queryStr, params);
+      return result[0]?.count || 0;
+    } catch (error) {
+      console.error('Erro ao contar solicitações:', error);
+      return 0;
+    }
+  }
 }

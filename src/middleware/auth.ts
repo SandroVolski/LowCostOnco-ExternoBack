@@ -35,10 +35,43 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
 
   try {
     const secret = process.env.JWT_SECRET || 'dev-secret';
+    console.log('🔧 authenticateToken - JWT_SECRET:', secret);
+    console.log('🔧 authenticateToken - Token recebido:', token.substring(0, 20) + '...');
+    console.log('🔧 authenticateToken - URL:', req.url);
+    console.log('🔧 authenticateToken - Query params:', req.query);
+    
     const decoded = jwt.verify(token, secret) as any;
-    req.user = decoded;
-    next();
+    console.log('🔧 authenticateToken - Token decodificado:', decoded);
+    
+    // Aceitar tokens de clínica, admin e operadora
+    if (decoded.role === 'clinica' || decoded.role === 'admin' || decoded.role === 'operator' || 
+        decoded.role === 'operadora_admin' || decoded.role === 'operadora_user') {
+      console.log('✅ Token aceito para role:', decoded.role);
+      
+      // Adicionar operadoraId para usuários de operadora
+      if (decoded.role === 'operadora_admin' || decoded.role === 'operadora_user' || decoded.role === 'operator') {
+        req.user = {
+          ...decoded,
+          operadoraId: decoded.operadoraId || decoded.operadora_id,
+          tipo: 'operadora' // Adicionar tipo para compatibilidade
+        };
+      } else {
+        req.user = {
+          ...decoded,
+          tipo: decoded.role === 'clinica' ? 'clinica' : 'admin'
+        };
+      }
+      
+      next();
+    } else {
+      console.log('❌ Token rejeitado para role:', decoded.role);
+      res.status(403).json({
+        success: false,
+        message: 'Token inválido para este endpoint'
+      });
+    }
   } catch (error) {
+    console.log('❌ authenticateToken - Erro ao verificar token:', error);
     res.status(403).json({
       success: false,
       message: 'Token inválido'

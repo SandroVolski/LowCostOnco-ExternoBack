@@ -192,10 +192,10 @@ export class ClinicaModel {
       
       const insertQuery = `
         INSERT INTO Clinicas (
-          nome, codigo, cnpj, endereco, cidade, estado, cep, 
-          telefones, emails, website, logo_url, observacoes, 
-          usuario, senha, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          nome, codigo, cnpj, endereco, cidade, estado, cep,
+          telefones, emails, website, logo_url, observacoes,
+          usuario, senha, status, operadora_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
       
       const values = [
@@ -213,7 +213,9 @@ export class ClinicaModel {
         clinicaData.observacoes || null,
         clinicaData.usuario || null,
         clinicaData.senha || null,
-        clinicaData.status || 'ativo'
+        clinicaData.status || 'ativo',
+        // incluir vínculo se enviado
+        (clinicaData as any).operadora_id || null
       ];
       
       console.log('🔧 Criando nova clínica...');
@@ -421,6 +423,26 @@ export class ClinicaModel {
       return true;
     }
   }
+
+  // Buscar clínicas por operadora
+  static async findByOperadoraId(operadoraId: number): Promise<Clinica[]> {
+    try {
+      const selectQuery = `
+        SELECT id, nome, codigo, cnpj, endereco, cidade, estado, cep, 
+               telefone, telefones, email, emails, website, logo_url, 
+               observacoes, usuario, status, created_at, updated_at
+        FROM Clinicas 
+        WHERE operadora_id = ? AND status = 'ativo'
+        ORDER BY nome ASC
+      `;
+      
+      const result = await query(selectQuery, [operadoraId]);
+      return result;
+    } catch (error) {
+      console.error('❌ Erro ao buscar clínicas por operadora:', error);
+      throw new Error('Erro ao buscar clínicas por operadora');
+    }
+  }
 }
 
 // Modelo para Responsáveis Técnicos
@@ -565,6 +587,26 @@ export class ResponsavelTecnicoModel {
     } catch (error) {
       console.error('Erro ao verificar CRM:', error);
       throw new Error('Erro ao verificar CRM');
+    }
+  }
+
+  // Contar clínicas
+  static async count(where?: any): Promise<number> {
+    try {
+      let queryStr = 'SELECT COUNT(*) as count FROM Clinicas';
+      const params: any[] = [];
+
+      if (where) {
+        const conditions = Object.keys(where).map(key => `${key} = ?`).join(' AND ');
+        queryStr += ` WHERE ${conditions}`;
+        params.push(...Object.values(where));
+      }
+
+      const result = await query(queryStr, params);
+      return result[0]?.count || 0;
+    } catch (error) {
+      console.error('Erro ao contar clínicas:', error);
+      return 0;
     }
   }
 }
