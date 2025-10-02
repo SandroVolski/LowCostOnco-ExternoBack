@@ -40,7 +40,7 @@ export class OperadoraModel {
   // Buscar operadora por ID
   static async findById(id: number): Promise<Operadora | null> {
     try {
-      const selectQuery = `SELECT * FROM Operadoras WHERE id = ?`;
+      const selectQuery = `SELECT * FROM operadoras WHERE id = ?`;
       const result = await query(selectQuery, [id]);
       return result.length > 0 ? result[0] : null;
     } catch (error) {
@@ -52,7 +52,7 @@ export class OperadoraModel {
   // Buscar operadora por código
   static async findByCode(codigo: string): Promise<Operadora | null> {
     try {
-      const selectQuery = `SELECT * FROM Operadoras WHERE codigo = ?`;
+      const selectQuery = `SELECT * FROM operadoras WHERE codigo = ?`;
       const result = await query(selectQuery, [codigo]);
       return result.length > 0 ? result[0] : null;
     } catch (error) {
@@ -65,9 +65,9 @@ export class OperadoraModel {
   static async create(operadoraData: OperadoraCreateInput): Promise<Operadora> {
     try {
       const insertQuery = `
-        INSERT INTO Operadoras (
-          nome, codigo, cnpj, status
-        ) VALUES (?, ?, ?, ?)
+        INSERT INTO operadoras (
+          nome, codigo, cnpj, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, NOW(), NOW())
       `;
       
       const values = [
@@ -133,7 +133,7 @@ export class OperadoraModel {
       values.push(id);
       
       const updateQuery = `
-        UPDATE Operadoras 
+        UPDATE operadoras 
         SET ${updateFields.join(', ')}
         WHERE id = ?
       `;
@@ -173,7 +173,7 @@ export class OperadoraModel {
   // Verificar se código já existe
   static async checkCodeExists(codigo: string, excludeId?: number): Promise<boolean> {
     try {
-      let checkQuery = `SELECT id FROM Operadoras WHERE codigo = ?`;
+      let checkQuery = `SELECT id FROM operadoras WHERE codigo = ?`;
       let params: any[] = [codigo];
       
       if (excludeId) {
@@ -197,7 +197,7 @@ export class OperadoraModel {
       console.log('🔧 Tentando conectar com banco real...');
       
       const selectQuery = `
-        SELECT * FROM Operadoras 
+        SELECT * FROM operadoras 
         ORDER BY nome ASC
       `;
       
@@ -226,7 +226,7 @@ export class OperadoraModel {
   static async delete(id: number): Promise<boolean> {
     try {
       const updateQuery = `
-        UPDATE Operadoras 
+        UPDATE operadoras 
         SET status = 'inativo', updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `;
@@ -255,9 +255,9 @@ export class OperadoraModel {
           SUM(CASE WHEN s.status = 'aprovada' THEN 1 ELSE 0 END) as aprovacoes,
           ROUND((SUM(CASE WHEN s.status = 'aprovada' THEN 1 ELSE 0 END) / COUNT(s.id)) * 100, 2) as taxaAprovacao,
           ROUND(AVG(TIMESTAMPDIFF(HOUR, s.created_at, s.updated_at)), 2) as tempoMedio
-        FROM Operadoras o
-        LEFT JOIN Clinicas c ON o.id = c.operadora_id
-        LEFT JOIN Solicitacoes_Autorizacao s ON c.id = s.clinica_id
+        FROM operadoras o
+        LEFT JOIN clinicas c ON o.id = c.operadora_id
+        LEFT JOIN solicitacoes s ON c.id = s.clinica_id
         WHERE o.status = 'ativo'
         GROUP BY o.id, o.nome
         ORDER BY solicitacoes DESC
@@ -279,7 +279,7 @@ export class OperadoraModel {
   // Contar operadoras
   static async count(where?: any): Promise<number> {
     try {
-      let queryStr = 'SELECT COUNT(*) as count FROM Operadoras';
+      let queryStr = 'SELECT COUNT(*) as count FROM operadoras';
       const params: any[] = [];
 
       if (where) {

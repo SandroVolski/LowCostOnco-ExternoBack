@@ -30,8 +30,32 @@ export const dbConfig = {
   } : undefined
 };
 
+// Configuração específica para o banco de logs
+export const logsDbConfig = {
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: 'bd_onkhos_logs', // Banco específico para logs
+  port: parseInt(process.env.DB_PORT || '3306'),
+  waitForConnections: true,
+  connectionLimit: 5, // Pool menor para logs
+  queueLimit: 0,
+  acquireTimeout: 60000,
+  timeout: 60000,
+  reconnect: true,
+  multipleStatements: false,
+  dateStrings: true,
+  timezone: 'local',
+  ssl: process.env.DB_SSL === 'true' ? {
+    rejectUnauthorized: false
+  } : undefined
+};
+
 // Criar pool de conexões otimizado
 export const pool = mysql.createPool(dbConfig);
+
+// Criar pool de conexões para logs
+export const logsPool = mysql.createPool(logsDbConfig);
 
 // Helpers para retry/ping
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));

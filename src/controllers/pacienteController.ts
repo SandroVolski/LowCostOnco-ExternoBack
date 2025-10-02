@@ -20,7 +20,21 @@ export class PacienteController {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
       const search = req.query.search as string || '';
-      const clinicaId = req.user?.clinicaId || req.user?.id || null;
+
+      // Se usuário é operadora, listar por operadoraId
+      const user: any = req.user;
+      if (user?.tipo === 'operadora' && user?.operadoraId) {
+        const result = await PacienteModel.findByOperadoraId(user.operadoraId, { page, limit, search });
+        const response: ApiResponse = {
+          success: true,
+          message: 'Pacientes encontrados com sucesso',
+          data: result
+        };
+        res.json(response);
+        return;
+      }
+
+      const clinicaId = user?.clinicaId || user?.id || null;
 
       if (!clinicaId) {
         const response: ApiResponse = {

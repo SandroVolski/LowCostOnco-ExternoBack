@@ -1,4 +1,4 @@
-import { pool } from '../config/database';
+import { logsPool } from '../config/database';
 
 export interface SystemLog {
   id?: number;
@@ -48,7 +48,7 @@ export class SystemLogModel {
   // Criar novo log do sistema
   static async create(log: SystemLog): Promise<number> {
     try {
-      const [result] = await pool.execute(
+      const [result] = await logsPool.execute(
         `INSERT INTO system_logs (
           timestamp, level, category, message, details, user_id, 
           user_agent, ip_address, endpoint, method, status_code, 
@@ -59,7 +59,11 @@ export class SystemLogModel {
           sanitize(log.level),
           sanitize(log.category),
           sanitize(log.message),
-          sanitize(log.details),
+          log.details !== undefined && log.details !== null
+            ? (typeof log.details === 'string' 
+                ? JSON.stringify(log.details) 
+                : JSON.stringify(log.details))
+            : null,
           sanitize(log.userId),
           sanitize(log.userAgent),
           sanitize(log.ipAddress),
@@ -131,7 +135,7 @@ export class SystemLogModel {
       }
 
       // Contar total de registros
-      const [countResult] = await pool.execute(
+      const [countResult] = await logsPool.execute(
         `SELECT COUNT(*) as total FROM system_logs ${whereClause}`,
         params
       );
@@ -142,7 +146,7 @@ export class SystemLogModel {
       const pageSize = filters.pageSize || 50;
       const offset = (page - 1) * pageSize;
 
-      const [logsResult] = await pool.execute(
+      const [logsResult] = await logsPool.execute(
         `SELECT * FROM system_logs ${whereClause} 
          ORDER BY timestamp DESC 
          LIMIT ? OFFSET ?`,
@@ -178,7 +182,7 @@ export class SystemLogModel {
   // Criar log de performance
   static async createPerformanceLog(log: PerformanceLog): Promise<number> {
     try {
-      const [result] = await pool.execute(
+      const [result] = await logsPool.execute(
         `INSERT INTO performance_logs (
           timestamp, operation, duration_ms, resource, user_id, details
         ) VALUES (?, ?, ?, ?, ?, ?)`,
@@ -202,7 +206,7 @@ export class SystemLogModel {
   // Criar log de segurança
   static async createSecurityLog(log: SecurityLog): Promise<number> {
     try {
-      const [result] = await pool.execute(
+      const [result] = await logsPool.execute(
         `INSERT INTO security_logs (
           timestamp, event_type, user_id, ip_address, user_agent, details, risk_level
         ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -230,7 +234,7 @@ export class SystemLogModel {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
 
-      const [result] = await pool.execute(
+      const [result] = await logsPool.execute(
         'DELETE FROM system_logs WHERE timestamp < ?',
         [cutoffDate]
       );
@@ -251,11 +255,11 @@ export class SystemLogModel {
     averageResponseTime: number;
   }> {
     try {
-      const [totalResult] = await pool.execute('SELECT COUNT(*) as total FROM system_logs');
-      const [levelResult] = await pool.execute('SELECT level, COUNT(*) as count FROM system_logs GROUP BY level');
-      const [categoryResult] = await pool.execute('SELECT category, COUNT(*) as count FROM system_logs GROUP BY category');
-      const [errorResult] = await pool.execute('SELECT COUNT(*) as count FROM system_logs WHERE level = "error" AND timestamp >= DATE_SUB(NOW(), INTERVAL 24 HOUR)');
-      const [responseTimeResult] = await pool.execute('SELECT AVG(response_time) as avg FROM system_logs WHERE response_time IS NOT NULL');
+      const [totalResult] = await logsPool.execute('SELECT COUNT(*) as total FROM system_logs');
+      const [levelResult] = await logsPool.execute('SELECT level, COUNT(*) as count FROM system_logs GROUP BY level');
+      const [categoryResult] = await logsPool.execute('SELECT category, COUNT(*) as count FROM system_logs GROUP BY category');
+      const [errorResult] = await logsPool.execute('SELECT COUNT(*) as count FROM system_logs WHERE level = "error" AND timestamp >= DATE_SUB(NOW(), INTERVAL 24 HOUR)');
+      const [responseTimeResult] = await logsPool.execute('SELECT AVG(response_time) as avg FROM system_logs WHERE response_time IS NOT NULL');
 
       const totalLogs = (totalResult as any)[0].total;
       const logsByLevel = (levelResult as any[]).reduce((acc, row) => {

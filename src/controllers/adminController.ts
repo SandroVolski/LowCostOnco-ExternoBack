@@ -28,13 +28,13 @@ export const getSystemMetrics = async (req: Request, res: Response) => {
       clinicasAtivas,
       operadorasAtivas
     ] = await Promise.all([
-      query('SELECT COUNT(*) as count FROM Clinicas').then(r => r[0]?.count || 0),
-      query('SELECT COUNT(*) as count FROM Operadoras').then(r => r[0]?.count || 0),
-      query('SELECT COUNT(*) as count FROM Protocolos').then(r => r[0]?.count || 0),
-      query('SELECT COUNT(*) as count FROM Pacientes_Clinica').then(r => r[0]?.count || 0),
+      query('SELECT COUNT(*) as count FROM clinicas').then(r => r[0]?.count || 0),
+      query('SELECT COUNT(*) as count FROM operadoras').then(r => r[0]?.count || 0),
+      query('SELECT COUNT(*) as count FROM protocolos').then(r => r[0]?.count || 0),
+      query('SELECT COUNT(*) as count FROM pacientes').then(r => r[0]?.count || 0),
       // Contagem real de princípios ativos distintos na base externa
       query(`SELECT COUNT(DISTINCT PrincipioAtivo) AS total FROM ${process.env.EXT_DB_NAME || process.env.SERVICO_DB_NAME || 'bd_servico'}.dPrincipioativo`).then(r => r[0]?.total || 0),
-      query('SELECT COUNT(*) as count FROM Solicitacoes_Autorizacao').then(r => r[0]?.count || 0),
+      query('SELECT COUNT(*) as count FROM solicitacoes').then(r => r[0]?.count || 0),
       SolicitacaoAutorizacaoModel.countByDate(new Date()),
       SolicitacaoAutorizacaoModel.countByDateRange(
         new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
@@ -44,8 +44,8 @@ export const getSystemMetrics = async (req: Request, res: Response) => {
         new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
         new Date()
       ),
-      query('SELECT COUNT(*) as count FROM Clinicas WHERE status = ?', ['ativa']).then(r => r[0]?.count || 0),
-      query('SELECT COUNT(*) as count FROM Operadoras WHERE status = ?', ['ativa']).then(r => r[0]?.count || 0)
+      query('SELECT COUNT(*) as count FROM clinicas WHERE status = ?', ['ativa']).then(r => r[0]?.count || 0),
+      query('SELECT COUNT(*) as count FROM operadoras WHERE status = ?', ['ativa']).then(r => r[0]?.count || 0)
     ]);
 
     // Calcular taxa de aprovação geral
@@ -95,7 +95,7 @@ export const getOperadorasInfo = async (req: Request, res: Response) => {
 
     const operadorasInfo = await Promise.all(
       operadoras.map(async (operadora) => {
-        const totalClinicas = await query('SELECT COUNT(*) as count FROM Clinicas WHERE operadora_id = ?', [operadora.id]).then(r => r[0]?.count || 0);
+        const totalClinicas = await query('SELECT COUNT(*) as count FROM clinicas WHERE operadora_id = ?', [operadora.id]).then(r => r[0]?.count || 0);
         const totalSolicitacoes = await SolicitacaoAutorizacaoModel.countByOperadora(operadora.id || 0);
         const totalPacientes = await PacienteModel.countByOperadora(operadora.id || 0);
         const aprovacoes = await SolicitacaoAutorizacaoModel.countByOperadoraAndStatus(operadora.id || 0, 'aprovada');

@@ -5,8 +5,6 @@ async function testOperadoraLogin() {
     console.log('🔧 Testando login de operadora...');
     
     // Primeiro, vamos verificar se há usuários de operadora no banco
-    console.log('📋 Verificando usuários de operadora no banco...');
-    
     const mysql = require('mysql2/promise');
     require('dotenv').config();
     
@@ -36,26 +34,36 @@ async function testOperadoraLogin() {
     if (operadoraUsers.length === 0) {
       console.log('❌ Nenhum usuário de operadora encontrado. Criando usuário de teste...');
       
-      // Criar usuário de teste
+      // Criar usuário de teste diretamente no banco
       const testUser = {
         nome: 'Admin Operadora Teste',
         email: 'admin@operadora.com',
         username: 'admin_operadora',
-        password: 'password123',
+        password_hash: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', // password123
         operadora_id: 1, // Assumindo que existe operadora com ID 1
-        role: 'operadora_admin'
+        role: 'operadora_admin',
+        status: 'ativo'
       };
       
-      console.log('📤 Criando usuário de teste...');
-      const createResponse = await axios.post('http://localhost:3001/api/operadora-auth/register', testUser, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer admin-token' // Token de admin para criar usuário
-        }
+      const insertConnection = await mysql.createConnection({
+        host: process.env.DB_HOST || 'localhost',
+        user: process.env.DB_USER || 'root',
+        password: process.env.DB_PASSWORD || '',
+        database: process.env.DB_NAME || 'bd_sistema_clinicas',
+        port: parseInt(process.env.DB_PORT || '3306')
       });
       
-      console.log('✅ Usuário criado:', createResponse.data);
+      await insertConnection.execute(`
+        INSERT INTO usuarios (nome, email, username, password_hash, operadora_id, role, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+      `, [testUser.nome, testUser.email, testUser.username, testUser.password_hash, testUser.operadora_id, testUser.role, testUser.status]);
+      
+      await insertConnection.end();
+      console.log('✅ Usuário de teste criado');
     }
+    
+    // Aguardar um pouco para o servidor inicializar
+    await new Promise(resolve => setTimeout(resolve, 3000));
     
     // Testar login
     const loginData = {
@@ -84,5 +92,4 @@ async function testOperadoraLogin() {
   }
 }
 
-// Aguardar um pouco para o servidor inicializar
-setTimeout(testOperadoraLogin, 2000);
+testOperadoraLogin();

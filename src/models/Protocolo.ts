@@ -14,7 +14,7 @@ async function fetchMedicamentosByProtocoloIds(protocoloIds: number[]): Promise<
   const placeholders = protocoloIds.map(() => '?').join(',');
   const sql = `
     SELECT *
-    FROM Medicamentos_Protocolo
+    FROM medicamentos_protocolo
     WHERE protocolo_id IN (${placeholders})
     ORDER BY protocolo_id ASC, ordem ASC, id ASC
   `;
@@ -38,7 +38,7 @@ export class ProtocoloModel {
     try {
       // Inserir protocolo
       const insertProtocoloQuery = `
-        INSERT INTO Protocolos (
+        INSERT INTO protocolos (
           clinica_id, nome, descricao, cid, intervalo_ciclos, 
           ciclos_previstos, linha, status
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -63,7 +63,7 @@ export class ProtocoloModel {
       // Inserir medicamentos se fornecidos
       if (dadosProtocolo.medicamentos && dadosProtocolo.medicamentos.length > 0) {
         const insertMedicamentoQuery = `
-          INSERT INTO Medicamentos_Protocolo (
+          INSERT INTO medicamentos_protocolo (
             protocolo_id, nome, dose, unidade_medida, via_adm, 
             dias_adm, frequencia, observacoes, ordem
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -107,13 +107,13 @@ export class ProtocoloModel {
   static async findById(id: number): Promise<ProtocoloWithMedicamentos | null> {
     const selectQuery = `
       SELECT p.*, c.nome as clinica_nome
-      FROM Protocolos p
-      LEFT JOIN Clinicas c ON p.clinica_id = c.id
+      FROM protocolos p
+      LEFT JOIN clinicas c ON p.clinica_id = c.id
       WHERE p.id = ?
     `;
     
     const medicamentosQuery = `
-      SELECT * FROM Medicamentos_Protocolo 
+      SELECT * FROM medicamentos_protocolo 
       WHERE protocolo_id = ? 
       ORDER BY ordem ASC, id ASC
     `;
@@ -158,8 +158,8 @@ export class ProtocoloModel {
     
     const selectQuery = `
       SELECT p.*, c.nome as clinica_nome
-      FROM Protocolos p
-      LEFT JOIN Clinicas c ON p.clinica_id = c.id
+      FROM protocolos p
+      LEFT JOIN clinicas c ON p.clinica_id = c.id
       WHERE p.clinica_id = ?
       ORDER BY p.created_at DESC
       LIMIT ${safeLimit} OFFSET ${safeOffset}
@@ -167,7 +167,7 @@ export class ProtocoloModel {
     
     const countQuery = `
       SELECT COUNT(*) as total 
-      FROM Protocolos 
+      FROM protocolos 
       WHERE clinica_id = ?
     `;
     
@@ -226,15 +226,15 @@ export class ProtocoloModel {
     
     const selectQuery = `
       SELECT p.*, c.nome as clinica_nome
-      FROM Protocolos p
-      LEFT JOIN Clinicas c ON p.clinica_id = c.id
+      FROM protocolos p
+      LEFT JOIN clinicas c ON p.clinica_id = c.id
       ORDER BY p.created_at DESC
       LIMIT ${safeLimit} OFFSET ${safeOffset}
     `;
     
     const countQuery = `
       SELECT COUNT(*) as total 
-      FROM Protocolos
+      FROM protocolos
     `;
     
     try {
@@ -278,8 +278,8 @@ export class ProtocoloModel {
   static async findByStatus(status: string): Promise<ProtocoloWithMedicamentos[]> {
     const selectQuery = `
       SELECT p.*, c.nome as clinica_nome
-      FROM Protocolos p
-      LEFT JOIN Clinicas c ON p.clinica_id = c.id
+      FROM protocolos p
+      LEFT JOIN clinicas c ON p.clinica_id = c.id
       WHERE p.status = ?
       ORDER BY p.created_at DESC
     `;
@@ -305,8 +305,8 @@ export class ProtocoloModel {
   static async findByCID(cid: string): Promise<ProtocoloWithMedicamentos[]> {
     const selectQuery = `
       SELECT p.*, c.nome as clinica_nome
-      FROM Protocolos p
-      LEFT JOIN Clinicas c ON p.clinica_id = c.id
+      FROM protocolos p
+      LEFT JOIN clinicas c ON p.clinica_id = c.id
       WHERE p.cid LIKE ?
       ORDER BY p.created_at DESC
     `;
@@ -347,7 +347,7 @@ export class ProtocoloModel {
         values.push(id);
         
         const updateQuery = `
-          UPDATE Protocolos 
+          UPDATE protocolos 
           SET ${updateFields.join(', ')}
           WHERE id = ?
         `;
@@ -362,12 +362,12 @@ export class ProtocoloModel {
       // Atualizar medicamentos se fornecidos
       if (dadosAtualizacao.medicamentos !== undefined) {
         // Deletar medicamentos existentes
-        await query('DELETE FROM Medicamentos_Protocolo WHERE protocolo_id = ?', [id]);
+        await query('DELETE FROM medicamentos_protocolo WHERE protocolo_id = ?', [id]);
         
         // Inserir novos medicamentos
         if (dadosAtualizacao.medicamentos.length > 0) {
           const insertMedicamentoQuery = `
-            INSERT INTO Medicamentos_Protocolo (
+            INSERT INTO medicamentos_protocolo (
               protocolo_id, nome, dose, unidade_medida, via_adm, 
               dias_adm, frequencia, observacoes, ordem
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -403,7 +403,7 @@ export class ProtocoloModel {
   
   // Deletar protocolo
   static async delete(id: number): Promise<boolean> {
-    const deleteQuery = `DELETE FROM Protocolos WHERE id = ?`;
+    const deleteQuery = `DELETE FROM protocolos WHERE id = ?`;
     
     try {
       const result = await query(deleteQuery, [id]);
@@ -417,7 +417,7 @@ export class ProtocoloModel {
   // Contar protocolos
   static async count(where?: any): Promise<number> {
     try {
-      let queryStr = 'SELECT COUNT(*) as count FROM Protocolos';
+      let queryStr = 'SELECT COUNT(*) as count FROM protocolos';
       const params: any[] = [];
 
       if (where) {

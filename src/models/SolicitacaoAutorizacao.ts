@@ -16,43 +16,64 @@ export class SolicitacaoAutorizacaoModel {
     });
     
     const insertQuery = `
-      INSERT INTO Solicitacoes_Autorizacao (
+      INSERT INTO solicitacoes (
         clinica_id, paciente_id, hospital_nome, hospital_codigo,
-        cliente_nome, cliente_codigo, sexo, data_nascimento, idade, data_solicitacao,
+        cliente_dados, data_solicitacao,
         diagnostico_cid, diagnostico_descricao, local_metastases,
-        estagio_t, estagio_n, estagio_m, estagio_clinico,
-        tratamento_cirurgia_radio, tratamento_quimio_adjuvante,
-        tratamento_quimio_primeira_linha, tratamento_quimio_segunda_linha,
+        estadiamento, tratamentos,
         finalidade, performance_status, siglas, ciclos_previstos, ciclo_atual,
         superficie_corporal, peso, altura,
-        medicamentos_antineoplasticos, dose_por_m2, dose_total, via_administracao,
-        dias_aplicacao_intervalo, medicacoes_associadas,
-        medico_assinatura_crm, numero_autorizacao, observacoes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        medicamentos, medico_assinatura_crm, numero_autorizacao, observacoes, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     
+    // Preparar dados do cliente como JSON
+    const clienteDados = {
+      nome: dadosSolicitacao.cliente_nome,
+      codigo: dadosSolicitacao.cliente_codigo,
+      sexo: dadosSolicitacao.sexo,
+      data_nascimento: dadosSolicitacao.data_nascimento,
+      idade: dadosSolicitacao.idade
+    };
+
+    // Preparar estadiamento como JSON
+    const estadiamento = {
+      t: dadosSolicitacao.estagio_t || null,
+      n: dadosSolicitacao.estagio_n || null,
+      m: dadosSolicitacao.estagio_m || null,
+      clinico: dadosSolicitacao.estagio_clinico || null
+    };
+
+    // Preparar tratamentos como JSON
+    const tratamentos = {
+      cirurgia_radio: dadosSolicitacao.tratamento_cirurgia_radio || null,
+      quimio_adjuvante: dadosSolicitacao.tratamento_quimio_adjuvante || null,
+      quimio_primeira_linha: dadosSolicitacao.tratamento_quimio_primeira_linha || null,
+      quimio_segunda_linha: dadosSolicitacao.tratamento_quimio_segunda_linha || null
+    };
+
+    // Preparar medicamentos como JSON
+    const medicamentos = {
+      antineoplasticos: dadosSolicitacao.medicamentos_antineoplasticos,
+      dose_por_m2: dadosSolicitacao.dose_por_m2,
+      dose_total: dadosSolicitacao.dose_total,
+      via_administracao: dadosSolicitacao.via_administracao,
+      dias_aplicacao_intervalo: dadosSolicitacao.dias_aplicacao_intervalo,
+      medicacoes_associadas: dadosSolicitacao.medicacoes_associadas || null
+    };
+
     const values = [
       dadosSolicitacao.clinica_id,
       dadosSolicitacao.paciente_id || null,
       dadosSolicitacao.hospital_nome,
       dadosSolicitacao.hospital_codigo,
-      dadosSolicitacao.cliente_nome,
-      dadosSolicitacao.cliente_codigo,
-      dadosSolicitacao.sexo,
-      dadosSolicitacao.data_nascimento,
-      dadosSolicitacao.idade,
+      JSON.stringify(clienteDados),
       dadosSolicitacao.data_solicitacao,
       dadosSolicitacao.diagnostico_cid,
       dadosSolicitacao.diagnostico_descricao,
       dadosSolicitacao.local_metastases || null,
-      dadosSolicitacao.estagio_t || null,
-      dadosSolicitacao.estagio_n || null,
-      dadosSolicitacao.estagio_m || null,
-      dadosSolicitacao.estagio_clinico || null,
-      dadosSolicitacao.tratamento_cirurgia_radio || null,
-      dadosSolicitacao.tratamento_quimio_adjuvante || null,
-      dadosSolicitacao.tratamento_quimio_primeira_linha || null,
-      dadosSolicitacao.tratamento_quimio_segunda_linha || null,
+      JSON.stringify(estadiamento),
+      JSON.stringify(tratamentos),
       dadosSolicitacao.finalidade,
       dadosSolicitacao.performance_status,
       dadosSolicitacao.siglas || null,
@@ -61,15 +82,11 @@ export class SolicitacaoAutorizacaoModel {
       dadosSolicitacao.superficie_corporal,
       dadosSolicitacao.peso,
       dadosSolicitacao.altura,
-      dadosSolicitacao.medicamentos_antineoplasticos,
-      dadosSolicitacao.dose_por_m2,
-      dadosSolicitacao.dose_total,
-      dadosSolicitacao.via_administracao,
-      dadosSolicitacao.dias_aplicacao_intervalo,
-      dadosSolicitacao.medicacoes_associadas || null,
+      JSON.stringify(medicamentos),
       dadosSolicitacao.medico_assinatura_crm,
       dadosSolicitacao.numero_autorizacao || null,
-      dadosSolicitacao.observacoes || null
+      dadosSolicitacao.observacoes || null,
+      'pendente' // status padrão
     ];
     
     try {
@@ -112,10 +129,15 @@ export class SolicitacaoAutorizacaoModel {
   // Buscar solicitação por ID
   static async findById(id: number): Promise<SolicitacaoAutorizacao | null> {
     const selectQuery = `
-      SELECT s.*, c.nome as clinica_nome, p.Paciente_Nome as paciente_nome
-      FROM Solicitacoes_Autorizacao s
-      LEFT JOIN Clinicas c ON s.clinica_id = c.id
-      LEFT JOIN Pacientes_Clinica p ON s.paciente_id = p.id
+      SELECT 
+        s.*, 
+        c.nome as clinica_nome, 
+        c.codigo as clinica_codigo,
+        p.nome as paciente_nome,
+        p.codigo as paciente_codigo
+      FROM solicitacoes s
+      LEFT JOIN clinicas c ON s.clinica_id = c.id
+      LEFT JOIN pacientes p ON s.paciente_id = p.id
       WHERE s.id = ?
     `;
     
@@ -147,10 +169,10 @@ export class SolicitacaoAutorizacaoModel {
     
     // ✅ CORREÇÃO: Construir query com LIMIT/OFFSET direto na string (não como parâmetros)
     const selectQuery = `
-      SELECT s.*, c.nome as clinica_nome, p.Paciente_Nome as paciente_nome
-      FROM Solicitacoes_Autorizacao s
-      LEFT JOIN Clinicas c ON s.clinica_id = c.id
-      LEFT JOIN Pacientes_Clinica p ON s.paciente_id = p.id
+      SELECT s.*, c.nome as clinica_nome, p.nome as paciente_nome
+      FROM solicitacoes s
+      LEFT JOIN clinicas c ON s.clinica_id = c.id
+      LEFT JOIN pacientes p ON s.paciente_id = p.id
       WHERE s.clinica_id = ?
       ORDER BY s.created_at DESC
       LIMIT ${safeLimit} OFFSET ${safeOffset}
@@ -158,7 +180,7 @@ export class SolicitacaoAutorizacaoModel {
     
     const countQuery = `
       SELECT COUNT(*) as total 
-      FROM Solicitacoes_Autorizacao 
+      FROM solicitacoes 
       WHERE clinica_id = ?
     `;
     
@@ -193,6 +215,72 @@ export class SolicitacaoAutorizacaoModel {
     }
   }
   
+  // Buscar solicitações por operadora_id (através das clínicas vinculadas)
+  static async findByOperadoraId(operadoraId: number, params: { page?: number; limit?: number } = {}): Promise<{
+    data: SolicitacaoAutorizacao[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+    };
+  }> {
+    const { page = 1, limit = 10 } = params;
+    const offset = (page - 1) * limit;
+    
+    // Validar e garantir que limit e offset sejam números inteiros
+    const safeLimit = Math.max(1, Math.min(100, Math.floor(Number(limit))));
+    const safeOffset = Math.max(0, Math.floor(Number(offset)));
+    
+    // Buscar solicitações das clínicas que pertencem à operadora
+    const selectQuery = `
+      SELECT s.*, c.nome as clinica_nome, p.nome as paciente_nome
+      FROM solicitacoes s
+      INNER JOIN clinicas c ON s.clinica_id = c.id
+      LEFT JOIN pacientes p ON s.paciente_id = p.id
+      WHERE c.operadora_id = ?
+      ORDER BY s.created_at DESC
+      LIMIT ${safeLimit} OFFSET ${safeOffset}
+    `;
+    
+    const countQuery = `
+      SELECT COUNT(*) as total 
+      FROM solicitacoes s
+      INNER JOIN clinicas c ON s.clinica_id = c.id
+      WHERE c.operadora_id = ?
+    `;
+    
+    try {
+      console.log('🔧 Buscando solicitações da operadora...');
+      console.log('Query de busca:', selectQuery);
+      console.log('Parâmetros:', [operadoraId]);
+      
+      // Executar contagem
+      const countResult = await query(countQuery, [operadoraId]);
+      
+      // Executar busca
+      const solicitacoes = await query(selectQuery, [operadoraId]);
+      
+      const total = countResult[0]?.total || 0;
+      const totalPages = Math.ceil(total / safeLimit);
+      
+      console.log(`✅ Sucesso! ${solicitacoes.length} solicitações encontradas para operadora ${operadoraId} (total: ${total})`);
+      
+      return {
+        data: solicitacoes,
+        pagination: {
+          page: Number(page),
+          limit: Number(safeLimit),
+          total,
+          totalPages
+        }
+      };
+    } catch (error) {
+      console.error('❌ Erro ao buscar solicitações da operadora:', error);
+      throw new Error('Erro ao buscar solicitações da operadora');
+    }
+  }
+  
   // ✅ NOVO MÉTODO - Listar todas as solicitações (para o endpoint geral)
   static async findAll(params: { page?: number; limit?: number } = {}): Promise<{
     data: SolicitacaoAutorizacao[];
@@ -212,17 +300,17 @@ export class SolicitacaoAutorizacaoModel {
     
     // Construir query com LIMIT/OFFSET direto na string
     const selectQuery = `
-      SELECT s.*, c.nome as clinica_nome, p.Paciente_Nome as paciente_nome
-      FROM Solicitacoes_Autorizacao s
-      LEFT JOIN Clinicas c ON s.clinica_id = c.id
-      LEFT JOIN Pacientes_Clinica p ON s.paciente_id = p.id
+      SELECT s.*, c.nome as clinica_nome, p.nome as paciente_nome
+      FROM solicitacoes s
+      LEFT JOIN clinicas c ON s.clinica_id = c.id
+      LEFT JOIN pacientes p ON s.paciente_id = p.id
       ORDER BY s.created_at DESC
       LIMIT ${safeLimit} OFFSET ${safeOffset}
     `;
     
     const countQuery = `
       SELECT COUNT(*) as total 
-      FROM Solicitacoes_Autorizacao
+      FROM solicitacoes
     `;
     
     try {
@@ -273,12 +361,12 @@ export class SolicitacaoAutorizacaoModel {
     // Obter status anterior
     let statusAntigo: string | null = null;
     try {
-      const before = await query('SELECT status FROM Solicitacoes_Autorizacao WHERE id = ?', [id]);
+      const before = await query('SELECT status FROM solicitacoes WHERE id = ?', [id]);
       statusAntigo = before?.[0]?.status || null;
     } catch {}
     
     const updateQuery = `
-      UPDATE Solicitacoes_Autorizacao 
+      UPDATE solicitacoes 
       SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `;
@@ -299,7 +387,7 @@ export class SolicitacaoAutorizacaoModel {
         try {
           await query(
             `INSERT INTO notificacoes (clinica_id, tipo, titulo, mensagem, solicitacao_id)
-             VALUES ((SELECT clinica_id FROM Solicitacoes_Autorizacao WHERE id = ?), 'auth_status', 'Solicitação atualizada', ?, ?)`,
+             VALUES ((SELECT clinica_id FROM solicitacoes WHERE id = ?), 'auth_status', 'Solicitação atualizada', ?, ?)`,
             [
               id,
               `Solicitação #${id}` + (statusAntigo ? ` alterou de ${statusAntigo} para ${statusNovo}` : ` agora está em ${statusNovo}`),
@@ -321,7 +409,7 @@ export class SolicitacaoAutorizacaoModel {
   
   // Deletar solicitação
   static async delete(id: number): Promise<boolean> {
-    const deleteQuery = `DELETE FROM Solicitacoes_Autorizacao WHERE id = ?`;
+    const deleteQuery = `DELETE FROM solicitacoes WHERE id = ?`;
     
     try {
       const result = await query(deleteQuery, [id]);
@@ -335,10 +423,10 @@ export class SolicitacaoAutorizacaoModel {
   // Buscar solicitações por status
   static async findByStatus(status: string): Promise<SolicitacaoAutorizacao[]> {
     const selectQuery = `
-      SELECT s.*, c.nome as clinica_nome, p.Paciente_Nome as paciente_nome
-      FROM Solicitacoes_Autorizacao s
-      LEFT JOIN Clinicas c ON s.clinica_id = c.id
-      LEFT JOIN Pacientes_Clinica p ON s.paciente_id = p.id
+      SELECT s.*, c.nome as clinica_nome, p.nome as paciente_nome
+      FROM solicitacoes s
+      LEFT JOIN clinicas c ON s.clinica_id = c.id
+      LEFT JOIN pacientes p ON s.paciente_id = p.id
       WHERE s.status = ?
       ORDER BY s.created_at DESC
     `;
@@ -362,7 +450,7 @@ export class SolicitacaoAutorizacaoModel {
       endOfDay.setHours(23, 59, 59, 999);
 
       const result = await query(
-        'SELECT COUNT(*) as count FROM Solicitacoes_Autorizacao WHERE created_at >= ? AND created_at <= ?',
+        'SELECT COUNT(*) as count FROM solicitacoes WHERE created_at >= ? AND created_at <= ?',
         [startOfDay, endOfDay]
       );
 
@@ -377,7 +465,7 @@ export class SolicitacaoAutorizacaoModel {
   static async countByDateRange(startDate: Date, endDate: Date): Promise<number> {
     try {
       const result = await query(
-        'SELECT COUNT(*) as count FROM Solicitacoes_Autorizacao WHERE created_at >= ? AND created_at <= ?',
+        'SELECT COUNT(*) as count FROM solicitacoes WHERE created_at >= ? AND created_at <= ?',
         [startDate, endDate]
       );
 
@@ -393,7 +481,7 @@ export class SolicitacaoAutorizacaoModel {
     try {
       const result = await query(`
         SELECT AVG(TIMESTAMPDIFF(HOUR, created_at, updated_at)) as tempo_medio
-        FROM Solicitacoes_Autorizacao 
+        FROM solicitacoes 
         WHERE status IN ('aprovada', 'rejeitada') 
         AND created_at IS NOT NULL 
         AND updated_at IS NOT NULL
@@ -411,8 +499,8 @@ export class SolicitacaoAutorizacaoModel {
     try {
       const result = await query(`
         SELECT AVG(TIMESTAMPDIFF(HOUR, s.created_at, s.updated_at)) as tempo_medio
-        FROM Solicitacoes_Autorizacao s
-        INNER JOIN Clinicas c ON s.clinica_id = c.id
+        FROM solicitacoes s
+        INNER JOIN clinicas c ON s.clinica_id = c.id
         WHERE c.operadora_id = ? 
         AND s.status IN ('aprovada', 'rejeitada') 
         AND s.created_at IS NOT NULL 
@@ -431,7 +519,7 @@ export class SolicitacaoAutorizacaoModel {
     try {
       const result = await query(`
         SELECT AVG(TIMESTAMPDIFF(HOUR, created_at, updated_at)) as tempo_medio
-        FROM Solicitacoes_Autorizacao 
+        FROM solicitacoes 
         WHERE clinica_id = ? 
         AND status IN ('aprovada', 'rejeitada') 
         AND created_at IS NOT NULL 
@@ -452,7 +540,7 @@ export class SolicitacaoAutorizacaoModel {
         SELECT 
           status,
           COUNT(*) as count
-        FROM Solicitacoes_Autorizacao 
+        FROM solicitacoes 
         GROUP BY status
       `);
 
@@ -484,7 +572,7 @@ export class SolicitacaoAutorizacaoModel {
           SUM(CASE WHEN status = 'aprovada' THEN 1 ELSE 0 END) as aprovacoes,
           SUM(CASE WHEN status = 'rejeitada' THEN 1 ELSE 0 END) as rejeicoes,
           SUM(CASE WHEN status = 'pendente' THEN 1 ELSE 0 END) as pendentes
-        FROM Solicitacoes_Autorizacao 
+        FROM solicitacoes 
         WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? MONTH)
         GROUP BY DATE_FORMAT(created_at, '%Y-%m')
         ORDER BY mes
@@ -512,7 +600,7 @@ export class SolicitacaoAutorizacaoModel {
           COUNT(*) as solicitacoes,
           SUM(CASE WHEN status = 'aprovada' THEN 1 ELSE 0 END) as aprovacoes,
           ROUND((SUM(CASE WHEN status = 'aprovada' THEN 1 ELSE 0 END) / COUNT(*)) * 100, 2) as taxaAprovacao
-        FROM Solicitacoes_Autorizacao 
+        FROM solicitacoes 
         WHERE created_at >= DATE_SUB(NOW(), INTERVAL ? MONTH)
         GROUP BY DATE_FORMAT(created_at, '%Y-%m')
         ORDER BY periodo
@@ -535,8 +623,8 @@ export class SolicitacaoAutorizacaoModel {
     try {
       const result = await query(`
         SELECT COUNT(*) as count
-        FROM Solicitacoes_Autorizacao s
-        INNER JOIN Clinicas c ON s.clinica_id = c.id
+        FROM solicitacoes s
+        INNER JOIN clinicas c ON s.clinica_id = c.id
         WHERE c.operadora_id = ?
       `, [operadoraId]);
 
@@ -552,8 +640,8 @@ export class SolicitacaoAutorizacaoModel {
     try {
       const result = await query(`
         SELECT COUNT(*) as count
-        FROM Solicitacoes_Autorizacao s
-        INNER JOIN Clinicas c ON s.clinica_id = c.id
+        FROM solicitacoes s
+        INNER JOIN clinicas c ON s.clinica_id = c.id
         WHERE c.operadora_id = ? AND s.status = ?
       `, [operadoraId, status]);
 
@@ -569,7 +657,7 @@ export class SolicitacaoAutorizacaoModel {
     try {
       const result = await query(`
         SELECT COUNT(*) as count
-        FROM Solicitacoes_Autorizacao
+        FROM solicitacoes
         WHERE clinica_id = ?
       `, [clinicaId]);
 
@@ -585,7 +673,7 @@ export class SolicitacaoAutorizacaoModel {
     try {
       const result = await query(`
         SELECT COUNT(*) as count
-        FROM Solicitacoes_Autorizacao
+        FROM solicitacoes
         WHERE clinica_id = ? AND status = ?
       `, [clinicaId, status]);
 
@@ -599,7 +687,7 @@ export class SolicitacaoAutorizacaoModel {
   // Contar solicitações
   static async count(where?: any): Promise<number> {
     try {
-      let queryStr = 'SELECT COUNT(*) as count FROM Solicitacoes_Autorizacao';
+      let queryStr = 'SELECT COUNT(*) as count FROM solicitacoes';
       const params: any[] = [];
 
       if (where) {

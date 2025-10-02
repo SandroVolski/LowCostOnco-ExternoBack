@@ -44,21 +44,35 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
     console.log('🔧 authenticateToken - Token decodificado:', decoded);
     
     // Aceitar tokens de clínica, admin e operadora
-    if (decoded.role === 'clinica' || decoded.role === 'admin' || decoded.role === 'operator' || 
-        decoded.role === 'operadora_admin' || decoded.role === 'operadora_user') {
-      console.log('✅ Token aceito para role:', decoded.role);
+    // Verificar tanto 'role' quanto 'tipo' para compatibilidade
+    const userRole = decoded.role || decoded.tipo;
+    const isClinica = userRole === 'clinica' || decoded.tipo === 'clinica';
+    const isAdmin = userRole === 'admin' || decoded.tipo === 'admin';
+    const isOperadora = userRole === 'operadora_admin' || userRole === 'operadora_user' || 
+                       userRole === 'operator' || decoded.tipo === 'operadora';
+    
+    if (isClinica || isAdmin || isOperadora) {
+      console.log('✅ Token aceito para role/tipo:', userRole || decoded.tipo);
       
       // Adicionar operadoraId para usuários de operadora
-      if (decoded.role === 'operadora_admin' || decoded.role === 'operadora_user' || decoded.role === 'operator') {
+      if (isOperadora) {
         req.user = {
           ...decoded,
           operadoraId: decoded.operadoraId || decoded.operadora_id,
-          tipo: 'operadora' // Adicionar tipo para compatibilidade
+          tipo: 'operadora',
+          role: userRole || 'operadora'
+        };
+      } else if (isClinica) {
+        req.user = {
+          ...decoded,
+          tipo: 'clinica',
+          role: 'clinica'
         };
       } else {
         req.user = {
           ...decoded,
-          tipo: decoded.role === 'clinica' ? 'clinica' : 'admin'
+          tipo: 'admin',
+          role: 'admin'
         };
       }
       
@@ -99,19 +113,29 @@ export const optionalAuth = (req: AuthRequest, res: Response, next: NextFunction
 };
 
 // Middleware de autorização por role
-export const requireRole = (roles: Array<'admin' | 'clinica' | 'operadora'>) => {
+export const requireRole = (roles: Array<'admin' | 'clinica' | 'operadora' | 'operadora_admin' | 'operadora_user'>) => {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     const user = req.user as any;
     console.log('🔧 requireRole - User:', user);
     console.log('🔧 requireRole - Required roles:', roles);
     console.log('🔧 requireRole - User role:', user?.role);
+    console.log('🔧 requireRole - User tipo:', user?.tipo);
     
-    if (!user || !user.role || !roles.includes(user.role as any)) {
-      console.log('❌ requireRole - Acesso negado');
+    // Verificar tanto role quanto tipo para compatibilidade
+    const userRole = user?.role || user?.tipo;
+    
+    // Mapear roles específicos de operadora para o role genérico 'operadora'
+    const normalizedUserRole = (userRole === 'operadora_admin' || userRole === 'operadora_user') ? 'operadora' : userRole;
+    const normalizedRequiredRoles = roles.map(role => 
+      (role === 'operadora_admin' || role === 'operadora_user') ? 'operadora' : role
+    );
+    
+    if (!user || !userRole || !normalizedRequiredRoles.includes(normalizedUserRole as any)) {
+      console.log('❌ requireRole - Acesso negado. Role/Tipo:', userRole, 'Requerido:', roles);
       res.status(403).json({ success: false, message: 'Acesso negado' });
       return;
     }
-    console.log('✅ requireRole - Acesso permitido');
+    console.log('✅ requireRole - Acesso permitido para:', userRole);
     next();
   };
 };

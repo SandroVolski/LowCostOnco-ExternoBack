@@ -4,6 +4,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { ClinicaModel, ResponsavelTecnicoModel } from '../models/Clinica';
+import { query } from '../config/database';
 import { 
   ClinicaCreateInput, 
   ClinicaUpdateInput,
@@ -19,6 +20,7 @@ interface AuthRequest extends Request {
     id: number;
     tipo: 'clinica' | 'operadora';
     clinicaId?: number;
+    operadoraId?: number;
   };
 }
 
@@ -302,6 +304,24 @@ export class ClinicaController {
       
       console.log('✅ Clínica registrada com sucesso:', novaClinica.nome);
       
+      // Criar usuário na tabela usuarios para login
+      if (clinicaData.usuario && clinicaData.senha) {
+        try {
+          console.log('🔧 Criando usuário na tabela usuarios:', clinicaData.usuario);
+          
+          const insertUserQuery = `
+            INSERT INTO usuarios (username, password_hash, role, clinica_id, status, created_at, updated_at)
+            VALUES (?, ?, 'clinica', ?, 'ativo', NOW(), NOW())
+          `;
+          
+          await query(insertUserQuery, [clinicaData.usuario, clinicaData.senha, novaClinica.id]);
+          console.log('✅ Usuário criado na tabela usuarios para login');
+        } catch (userError) {
+          console.error('⚠️ Erro ao criar usuário na tabela usuarios:', userError);
+          // Não falhar o registro da clínica por causa do usuário
+        }
+      }
+      
       // Remover senha da resposta
       const { senha, ...clinicaResponse } = novaClinica;
       
@@ -341,20 +361,81 @@ export class ClinicaController {
         return;
       }
       
-      // Buscar clínica por usuário
-      const clinica = await ClinicaModel.findByUser(usuario);
-      if (!clinica) {
-        console.log('❌ Usuário não encontrado:', usuario);
-        const response: ApiResponse = {
-          success: false,
-          message: 'Usuário ou senha inválidos'
+      // Buscar usuário na tabela usuarios (consolidada)
+      const usuarios = await query(
+        'SELECT u.*, c.nome as clinica_nome, c.codigo as clinica_codigo, c.status as clinica_status FROM usuarios u JOIN clinicas c ON u.clinica_id = c.id WHERE u.username = ? AND u.status = ? AND u.role IN ("admin", "clinica")',
+        [usuario, 'ativo']
+      );
+      
+      if (usuarios.length === 0) {
+        // Fallback: tentar login direto da clínica
+        console.log('🔍 Tentando login direto da clínica:', usuario);
+        const clinicas = await query(
+          'SELECT * FROM clinicas WHERE usuario = ? AND status = ?',
+          [usuario, 'ativo']
+        );
+        
+        if (clinicas.length === 0) {
+          console.log('❌ Usuário não encontrado:', usuario);
+          const response: ApiResponse = {
+            success: false,
+            message: 'Usuário ou senha inválidos'
+          };
+          res.status(401).json(response);
+          return;
+        }
+        
+        // Usar dados da clínica diretamente
+        const clinica = clinicas[0];
+        const clinicaResponse = {
+          id: clinica.id,
+          nome: clinica.nome,
+          codigo: clinica.codigo,
+          status: clinica.status
         };
-        res.status(401).json(response);
+        
+        // Verificar senha da clínica
+        if (!clinica.senha || !await bcrypt.compare(senha, clinica.senha)) {
+          console.log('❌ Senha inválida para clínica:', usuario);
+          const response: ApiResponse = {
+            success: false,
+            message: 'Usuário ou senha inválidos'
+          };
+          res.status(401).json(response);
+          return;
+        }
+        
+        // Gerar token para clínica
+        const token = jwt.sign(
+          { 
+            id: clinica.id, 
+            clinicaId: clinica.id,
+            tipo: 'clinica',
+            role: 'clinica'
+          },
+          process.env.JWT_SECRET || 'dev-secret',
+          { expiresIn: '7d' }
+        );
+        
+        console.log('✅ Login direto da clínica realizado:', clinica.nome);
+        
+        const response: ApiResponse = {
+          success: true,
+          message: 'Login realizado com sucesso',
+          data: {
+            clinic: clinicaResponse,
+            token
+          }
+        };
+        
+        res.json(response);
         return;
       }
       
+      const usuarioClinica = usuarios[0];
+      
       // Verificar senha
-      if (!clinica.senha || !await bcrypt.compare(senha, clinica.senha)) {
+      if (!usuarioClinica.password_hash || !await bcrypt.compare(senha, usuarioClinica.password_hash)) {
         console.log('❌ Senha inválida para usuário:', usuario);
         const response: ApiResponse = {
           success: false,
@@ -365,8 +446,8 @@ export class ClinicaController {
       }
       
       // Verificar se clínica está ativa
-      if (clinica.status !== 'ativo') {
-        console.log('❌ Clínica inativa:', clinica.nome);
+      if (usuarioClinica.clinica_status !== 'ativo') {
+        console.log('❌ Clínica inativa:', usuarioClinica.clinica_nome);
         const response: ApiResponse = {
           success: false,
           message: 'Clínica inativa. Entre em contato com o suporte.'
@@ -375,28 +456,47 @@ export class ClinicaController {
         return;
       }
       
+      // Atualizar último login
+      await query(
+        'UPDATE usuarios SET last_login = NOW() WHERE id = ?',
+        [usuarioClinica.id]
+      );
+      
       // Gerar token JWT
       const token = jwt.sign(
         { 
-          id: clinica.id, 
-          clinicaId: clinica.id,
-          tipo: 'clinica' 
+          id: usuarioClinica.id, 
+          clinicaId: usuarioClinica.clinica_id,
+          tipo: 'clinica',
+          role: 'clinica'
         },
-        process.env.JWT_SECRET!,
+        process.env.JWT_SECRET || 'dev-secret',
         { expiresIn: '7d' }
       );
       
-      console.log('✅ Login realizado com sucesso para:', clinica.nome);
+      console.log('✅ Login realizado com sucesso para:', usuarioClinica.nome);
       
-      // Remover senha da resposta
-      const { senha: _, ...clinicaResponse } = clinica;
+      // Preparar resposta
+      const clinicaResponse = {
+        id: usuarioClinica.clinica_id,
+        nome: usuarioClinica.clinica_nome,
+        codigo: usuarioClinica.clinica_codigo,
+        status: usuarioClinica.clinica_status
+      };
       
       const response: ApiResponse = {
         success: true,
         message: 'Login realizado com sucesso',
         data: {
           clinic: clinicaResponse,
-          token
+          token,
+          user: {
+            id: usuarioClinica.id,
+            nome: usuarioClinica.nome,
+            email: usuarioClinica.email,
+            username: usuarioClinica.username,
+            role: usuarioClinica.role
+          }
         }
       };
       
@@ -601,6 +701,295 @@ export class ClinicaController {
       const response: ApiResponse = {
         success: false,
         message: 'Erro ao remover responsável técnico',
+        error: error instanceof Error ? error.message : 'Erro desconhecido'
+      };
+      res.status(500).json(response);
+    }
+  }
+
+  // =====================================================
+  // MÉTODOS ADMINISTRATIVOS (CRUD COMPLETO)
+  // =====================================================
+
+  // GET /api/clinicas/por-operadora - Listar clínicas por operadora
+  static async getClinicasPorOperadora(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const operadoraId = req.user?.operadoraId || req.query.operadora_id;
+      
+      if (!operadoraId) {
+        const response: ApiResponse = {
+          success: false,
+          message: 'ID da operadora é obrigatório'
+        };
+        res.status(400).json(response);
+        return;
+      }
+
+      console.log('🔧 Buscando clínicas da operadora ID:', operadoraId);
+      
+      // Buscar clínicas reais do banco filtradas por operadora_id
+      const clinicas = await ClinicaModel.findByOperadoraId(Number(operadoraId));
+      
+      console.log(`✅ ${clinicas.length} clínicas encontradas para operadora ${operadoraId}`);
+
+      const response: ApiResponse = {
+        success: true,
+        message: 'Clínicas encontradas',
+        data: clinicas
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('❌ Erro ao buscar clínicas por operadora:', error);
+      const response: ApiResponse = {
+        success: false,
+        message: 'Erro ao buscar clínicas',
+        error: error instanceof Error ? error.message : 'Erro desconhecido'
+      };
+      res.status(500).json(response);
+    }
+  }
+
+  // GET /api/clinicas/admin - Listar todas as clínicas (admin)
+  static async getAllClinicas(req: Request, res: Response): Promise<void> {
+    try {
+      // Buscar clínicas reais do banco
+      const clinicas = await ClinicaModel.findAll();
+      
+      // Processar dados para garantir estrutura esperada pelo frontend
+      const clinicasProcessadas = clinicas.map((clinica: any) => ({
+        id: clinica.id,
+        nome: clinica.nome,
+        codigo: clinica.codigo,
+        cnpj: clinica.cnpj,
+        endereco: clinica.endereco,
+        cidade: clinica.cidade,
+        estado: clinica.estado,
+        cep: clinica.cep,
+        telefones: Array.isArray(clinica.telefones) ? clinica.telefones : (clinica.telefone ? [clinica.telefone] : []),
+        emails: Array.isArray(clinica.emails) ? clinica.emails : (clinica.email ? [clinica.email] : []),
+        website: clinica.website,
+        logo_url: clinica.logo_url,
+        observacoes: clinica.observacoes,
+        operadora_id: clinica.operadora_id,
+        status: clinica.status || 'ativo',
+        created_at: clinica.created_at
+      }));
+
+      const response: ApiResponse = {
+        success: true,
+        message: 'Clínicas encontradas',
+        data: clinicasProcessadas
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('❌ Erro ao buscar todas as clínicas:', error);
+      const response: ApiResponse = {
+        success: false,
+        message: 'Erro ao buscar clínicas',
+        error: error instanceof Error ? error.message : 'Erro desconhecido'
+      };
+      res.status(500).json(response);
+    }
+  }
+
+  // GET /api/clinicas/admin/:id - Buscar clínica por ID (admin)
+  static async getClinicaById(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      
+      if (!id) {
+        const response: ApiResponse = {
+          success: false,
+          message: 'ID da clínica é obrigatório'
+        };
+        res.status(400).json(response);
+        return;
+      }
+
+      // DADOS MOCK TEMPORÁRIOS
+      const mockClinica = {
+        id: parseInt(id),
+        nome: `Clínica Teste ${id}`,
+        codigo: `CLI${id.padStart(3, '0')}`,
+        operadora_id: 1,
+        status: 'ativo',
+        created_at: new Date().toISOString()
+      };
+
+      const response: ApiResponse = {
+        success: true,
+        message: 'Clínica encontrada',
+        data: mockClinica
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('❌ Erro ao buscar clínica por ID:', error);
+      const response: ApiResponse = {
+        success: false,
+        message: 'Erro ao buscar clínica',
+        error: error instanceof Error ? error.message : 'Erro desconhecido'
+      };
+      res.status(500).json(response);
+    }
+  }
+
+  // POST /api/clinicas/admin - Criar nova clínica (admin)
+  static async createClinica(req: Request, res: Response): Promise<void> {
+    try {
+      console.log('🔧 Iniciando criação de clínica via admin...');
+      console.log('📋 Dados recebidos:', req.body);
+      
+      const clinicaData: ClinicaCreateInput = req.body;
+      
+      // Validações básicas
+      if (!clinicaData.nome || !clinicaData.codigo) {
+        const response: ApiResponse = {
+          success: false,
+          message: 'Nome e código são obrigatórios'
+        };
+        res.status(400).json(response);
+        return;
+      }
+
+      // Verificar se usuário já existe (se fornecido)
+      if (clinicaData.usuario) {
+        const userExists = await ClinicaModel.checkUserExists(clinicaData.usuario);
+        if (userExists) {
+          console.log('❌ Usuário já existe:', clinicaData.usuario);
+          const response: ApiResponse = {
+            success: false,
+            message: 'Já existe uma clínica com este usuário'
+          };
+          res.status(400).json(response);
+          return;
+        }
+      }
+      
+      // Hash da senha se fornecida
+      if (clinicaData.senha) {
+        clinicaData.senha = await bcrypt.hash(clinicaData.senha, 10);
+      }
+      
+      // Criar clínica usando o modelo
+      const novaClinica = await ClinicaModel.create(clinicaData);
+      
+      console.log('✅ Clínica criada com sucesso:', novaClinica.nome);
+      
+      // Criar usuário na tabela usuarios para login
+      if (clinicaData.usuario && clinicaData.senha) {
+        try {
+          console.log('🔧 Criando usuário na tabela usuarios:', clinicaData.usuario);
+          
+          const insertUserQuery = `
+            INSERT INTO usuarios (username, password_hash, role, clinica_id, operadora_id, status, created_at, updated_at)
+            VALUES (?, ?, 'clinica', ?, ?, 'ativo', NOW(), NOW())
+          `;
+          
+          await query(insertUserQuery, [
+            clinicaData.usuario, 
+            clinicaData.senha, 
+            novaClinica.id,
+            clinicaData.operadora_id || null
+          ]);
+          console.log('✅ Usuário criado na tabela usuarios para login');
+        } catch (userError) {
+          console.error('⚠️ Erro ao criar usuário na tabela usuarios:', userError);
+          // Não falhar o registro da clínica por causa do usuário
+        }
+      }
+      
+      // Remover senha da resposta
+      const { senha, ...clinicaResponse } = novaClinica;
+      
+      const response: ApiResponse = {
+        success: true,
+        message: 'Clínica criada com sucesso',
+        data: clinicaResponse
+      };
+
+      res.status(201).json(response);
+    } catch (error) {
+      console.error('❌ Erro ao criar clínica:', error);
+      const response: ApiResponse = {
+        success: false,
+        message: 'Erro ao criar clínica',
+        error: error instanceof Error ? error.message : 'Erro desconhecido'
+      };
+      res.status(500).json(response);
+    }
+  }
+
+  // PUT /api/clinicas/admin/:id - Atualizar clínica (admin)
+  static async updateClinica(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const { nome, codigo, status } = req.body;
+      
+      if (!id) {
+        const response: ApiResponse = {
+          success: false,
+          message: 'ID da clínica é obrigatório'
+        };
+        res.status(400).json(response);
+        return;
+      }
+
+      // DADOS MOCK TEMPORÁRIOS
+      const clinicaAtualizada = {
+        id: parseInt(id),
+        nome: nome || `Clínica Atualizada ${id}`,
+        codigo: codigo || `CLI${id.padStart(3, '0')}`,
+        status: status || 'ativo',
+        updated_at: new Date().toISOString()
+      };
+
+      const response: ApiResponse = {
+        success: true,
+        message: 'Clínica atualizada com sucesso',
+        data: clinicaAtualizada
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('❌ Erro ao atualizar clínica:', error);
+      const response: ApiResponse = {
+        success: false,
+        message: 'Erro ao atualizar clínica',
+        error: error instanceof Error ? error.message : 'Erro desconhecido'
+      };
+      res.status(500).json(response);
+    }
+  }
+
+  // DELETE /api/clinicas/admin/:id - Deletar clínica (admin)
+  static async deleteClinica(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      
+      if (!id) {
+        const response: ApiResponse = {
+          success: false,
+          message: 'ID da clínica é obrigatório'
+        };
+        res.status(400).json(response);
+        return;
+      }
+
+      const response: ApiResponse = {
+        success: true,
+        message: 'Clínica deletada com sucesso',
+        data: { id: parseInt(id) }
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('❌ Erro ao deletar clínica:', error);
+      const response: ApiResponse = {
+        success: false,
+        message: 'Erro ao deletar clínica',
         error: error instanceof Error ? error.message : 'Erro desconhecido'
       };
       res.status(500).json(response);

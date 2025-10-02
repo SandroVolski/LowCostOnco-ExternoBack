@@ -16,6 +16,64 @@ interface AuthRequest extends Request {
 }
 
 export class SolicitacaoController {
+  private static flattenSolicitacao(row: any): any {
+    const parseJson = (v: any) => {
+      if (!v) return null;
+      try {
+        return typeof v === 'string' ? JSON.parse(v) : v;
+      } catch { return null; }
+    };
+    const cliente = parseJson(row.cliente_dados) || {};
+    const estadiamento = parseJson(row.estadiamento) || {};
+    const meds = parseJson(row.medicamentos) || {};
+    const tratamentos = parseJson(row.tratamentos) || {};
+
+    // Normalizar datas simples para string YYYY-MM-DD
+    const normalizeDate = (d: any) => {
+      if (!d) return null;
+      const s = String(d);
+      if (s.includes('T')) return s.split('T')[0];
+      return s;
+    };
+
+    return {
+      ...row,
+      // Campos compatíveis com frontend antigo (com fallbacks)
+      cliente_nome: cliente.nome || row.paciente_nome || null,
+      cliente_codigo: cliente.codigo || row.paciente_codigo || null,
+      sexo: cliente.sexo || row.sexo || null,
+      data_nascimento: cliente.data_nascimento || row.data_nascimento || null,
+      idade: cliente.idade ?? null,
+
+      estagio_t: estadiamento.t || null,
+      estagio_n: estadiamento.n || null,
+      estagio_m: estadiamento.m || null,
+      estagio_clinico: estadiamento.clinico || null,
+
+      medicamentos_antineoplasticos: meds.antineoplasticos || null,
+      dose_por_m2: meds.dose_por_m2 || null,
+      dose_total: meds.dose_total || null,
+      via_administracao: meds.via_administracao || null,
+      dias_aplicacao_intervalo: meds.dias_aplicacao_intervalo || null,
+      medicacoes_associadas: meds.medicacoes_associadas || null,
+
+      // Tratamentos - compatibilidade
+      tratamento_cirurgia_radio: tratamentos.cirurgia_radio || null,
+      tratamento_quimio_adjuvante: tratamentos.quimio_adjuvante || null,
+      tratamento_quimio_primeira_linha: tratamentos.quimio_primeira_linha || null,
+      tratamento_quimio_segunda_linha: tratamentos.quimio_segunda_linha || null,
+
+      // Aliases comuns
+      cliente: cliente.nome || row.paciente_nome || null,
+      hospital_nome: row.hospital_nome || row.clinica_nome || null,
+      hospital_codigo: row.hospital_codigo || row.clinica_codigo || null,
+
+      // Datas normalizadas
+      data_solicitacao: normalizeDate(row.data_solicitacao),
+      created_at: normalizeDate(row.created_at),
+      updated_at: normalizeDate(row.updated_at),
+    };
+  }
   
   // POST /api/solicitacoes - Criar nova solicitação
   static async create(req: AuthRequest, res: Response): Promise<void> {
@@ -73,7 +131,7 @@ export class SolicitacaoController {
       const response: ApiResponse = {
         success: true,
         message: 'Solicitação criada com sucesso',
-        data: novaSolicitacao
+        data: SolicitacaoController.flattenSolicitacao(novaSolicitacao as any)
       };
       
       res.status(201).json(response);
@@ -123,7 +181,7 @@ export class SolicitacaoController {
       const response: ApiResponse = {
         success: true,
         message: 'Solicitação encontrada com sucesso',
-        data: solicitacao
+        data: SolicitacaoController.flattenSolicitacao(solicitacao as any)
       };
       
       res.json(response);
@@ -161,11 +219,15 @@ export class SolicitacaoController {
       }
       
       const result = await SolicitacaoAutorizacaoModel.findByClinicaId(clinicaId, { page, limit });
+      const mapped = {
+        ...result,
+        data: result.data.map(r => SolicitacaoController.flattenSolicitacao(r as any))
+      };
       
       const response: ApiResponse = {
         success: true,
         message: 'Solicitações da clínica encontradas com sucesso',
-        data: result
+        data: mapped
       };
       
       res.json(response);
@@ -221,9 +283,9 @@ export class SolicitacaoController {
       }
       
       // Buscar a solicitação
-      const solicitacao = await SolicitacaoAutorizacaoModel.findById(id);
+      const solicitacaoRaw = await SolicitacaoAutorizacaoModel.findById(id);
       
-      if (!solicitacao) {
+      if (!solicitacaoRaw) {
         const response: ApiResponse = {
           success: false,
           message: 'Solicitação não encontrada'
@@ -231,6 +293,8 @@ export class SolicitacaoController {
         res.status(404).json(response);
         return;
       }
+      // Achatar campos JSON para compatibilidade com o template do PDF
+      const solicitacao = SolicitacaoController.flattenSolicitacao(solicitacaoRaw as any) as any;
       
       console.log('✅ Solicitação encontrada:', {
         id: solicitacao.id,
@@ -330,6 +394,15 @@ export class SolicitacaoController {
       const id = parseInt(req.params.id);
       const dadosAtualizacao: SolicitacaoUpdateInput = req.body;
       const clinicaId = req.user?.clinicaId || req.user?.id || null;
+      const userRole = req.user?.role;
+      
+      console.log('🔧 Atualizando status da solicitação:', {
+        id,
+        dadosAtualizacao,
+        clinicaId,
+        userRole,
+        userId: req.user?.id
+      });
       
       if (isNaN(id)) {
         const response: ApiResponse = {
@@ -346,12 +419,17 @@ export class SolicitacaoController {
         res.status(404).json(response);
         return;
       }
-      if (clinicaId && (atual as any).clinica_id !== clinicaId) {
+      
+      // Validação de acesso: operadoras podem acessar qualquer solicitação
+      // Clínicas só podem acessar suas próprias solicitações
+      if (userRole && !userRole.includes('operadora') && clinicaId && (atual as any).clinica_id !== clinicaId) {
+        console.log('❌ Acesso negado - clínica tentando acessar solicitação de outra clínica');
         const response: ApiResponse = { success: false, message: 'Acesso negado à solicitação' };
         res.status(403).json(response);
         return;
       }
 
+      console.log('✅ Validação de acesso aprovada, atualizando solicitação...');
       const solicitacaoAtualizada = await SolicitacaoAutorizacaoModel.updateStatus(id, dadosAtualizacao);
       
       if (!solicitacaoAtualizada) {
@@ -363,15 +441,16 @@ export class SolicitacaoController {
         return;
       }
       
+      console.log('✅ Solicitação atualizada com sucesso');
       const response: ApiResponse = {
         success: true,
         message: 'Status da solicitação atualizado com sucesso',
-        data: solicitacaoAtualizada
+        data: SolicitacaoController.flattenSolicitacao(solicitacaoAtualizada as any)
       };
       
       res.json(response);
     } catch (error) {
-      console.error('Erro ao atualizar status da solicitação:', error);
+      console.error('❌ Erro ao atualizar status da solicitação:', error);
       const response: ApiResponse = {
         success: false,
         message: 'Erro ao atualizar status da solicitação',
@@ -473,21 +552,45 @@ export class SolicitacaoController {
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
-      const clinicaId = req.user?.clinicaId || req.user?.id || (req.query.clinica_id ? parseInt(req.query.clinica_id as string) : null);
-      
-      let result;
-      
-      if (clinicaId) {
-        result = await SolicitacaoAutorizacaoModel.findByClinicaId(clinicaId, { page, limit });
-      } else {
-        // Implementar método para listar todas se necessário
-        result = await SolicitacaoAutorizacaoModel.findByClinicaId(1, { page, limit }); // Temporário
+      const user: any = req.user;
+
+      // Operadora: listar todas as solicitações das clínicas vinculadas
+      if (user?.tipo === 'operadora' && user?.operadoraId) {
+        console.log('🔧 Filtrando solicitações para operadora ID:', user.operadoraId);
+        
+        // Buscar solicitações filtradas por operadora_id
+        const result = await SolicitacaoAutorizacaoModel.findByOperadoraId(user.operadoraId, { page, limit });
+        const mapped = {
+          ...result,
+          data: result.data.map(r => SolicitacaoController.flattenSolicitacao(r as any))
+        };
+        
+        console.log(`✅ ${result.data.length} solicitações encontradas para operadora ${user.operadoraId}`);
+        
+        const response: ApiResponse = {
+          success: true,
+          message: 'Solicitações encontradas com sucesso',
+          data: mapped
+        };
+        res.json(response);
+        return;
       }
+
+      const clinicaId = user?.clinicaId || user?.id || (req.query.clinica_id ? parseInt(req.query.clinica_id as string) : null);
+
+      const result = clinicaId
+        ? await SolicitacaoAutorizacaoModel.findByClinicaId(clinicaId, { page, limit })
+        : await SolicitacaoAutorizacaoModel.findAll({ page, limit });
+
+      const mapped = {
+        ...result,
+        data: result.data.map(r => SolicitacaoController.flattenSolicitacao(r as any))
+      };
       
       const response: ApiResponse = {
         success: true,
         message: 'Solicitações encontradas com sucesso',
-        data: result
+        data: mapped
       };
       
       res.json(response);

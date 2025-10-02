@@ -144,10 +144,29 @@ export class PacienteModel {
       SELECT 
         p.*,
         o.nome as operadora_nome,
-        pr.nome as prestador_nome
-      FROM Pacientes_Clinica p
-      LEFT JOIN Operadoras o ON p.Operadora = o.id
-      LEFT JOIN Prestadores pr ON p.Prestador = pr.id
+        -- Médico assistente (pega um ativo da clínica)
+        (
+          SELECT rt.nome FROM responsaveis_tecnicos rt 
+          WHERE rt.clinica_id = p.clinica_id AND rt.status = 'ativo'
+          ORDER BY rt.id ASC LIMIT 1
+        ) AS medico_assistente_nome,
+        (
+          SELECT rt.email FROM responsaveis_tecnicos rt 
+          WHERE rt.clinica_id = p.clinica_id AND rt.status = 'ativo'
+          ORDER BY rt.id ASC LIMIT 1
+        ) AS medico_assistente_email,
+        (
+          SELECT rt.telefone FROM responsaveis_tecnicos rt 
+          WHERE rt.clinica_id = p.clinica_id AND rt.status = 'ativo'
+          ORDER BY rt.id ASC LIMIT 1
+        ) AS medico_assistente_telefone,
+        (
+          SELECT rt.especialidade FROM responsaveis_tecnicos rt 
+          WHERE rt.clinica_id = p.clinica_id AND rt.status = 'ativo'
+          ORDER BY rt.id ASC LIMIT 1
+        ) AS medico_assistente_especialidade
+      FROM pacientes p
+      LEFT JOIN operadoras o ON p.operadora_id = o.id
       ${whereClause}
       ORDER BY p.created_at DESC
     `;
@@ -155,7 +174,7 @@ export class PacienteModel {
     // Query para contar total de registros
     const countQuery = `
       SELECT COUNT(*) as total 
-      FROM Pacientes_Clinica p 
+      FROM pacientes p 
       ${whereClause}
     `;
     
@@ -195,10 +214,28 @@ export class PacienteModel {
       SELECT 
         p.*,
         o.nome as operadora_nome,
-        pr.nome as prestador_nome
-      FROM Pacientes_Clinica p
-      LEFT JOIN Operadoras o ON p.Operadora = o.id
-      LEFT JOIN Prestadores pr ON p.Prestador = pr.id
+        (
+          SELECT rt.nome FROM responsaveis_tecnicos rt 
+          WHERE rt.clinica_id = p.clinica_id AND rt.status = 'ativo'
+          ORDER BY rt.id ASC LIMIT 1
+        ) AS medico_assistente_nome,
+        (
+          SELECT rt.email FROM responsaveis_tecnicos rt 
+          WHERE rt.clinica_id = p.clinica_id AND rt.status = 'ativo'
+          ORDER BY rt.id ASC LIMIT 1
+        ) AS medico_assistente_email,
+        (
+          SELECT rt.telefone FROM responsaveis_tecnicos rt 
+          WHERE rt.clinica_id = p.clinica_id AND rt.status = 'ativo'
+          ORDER BY rt.id ASC LIMIT 1
+        ) AS medico_assistente_telefone,
+        (
+          SELECT rt.especialidade FROM responsaveis_tecnicos rt 
+          WHERE rt.clinica_id = p.clinica_id AND rt.status = 'ativo'
+          ORDER BY rt.id ASC LIMIT 1
+        ) AS medico_assistente_especialidade
+      FROM pacientes p
+      LEFT JOIN operadoras o ON p.operadora_id = o.id
       WHERE p.id = ?
     `;
     
@@ -220,7 +257,7 @@ export class PacienteModel {
     let searchParams: any[] = [clinicaId];
     
     if (search && search.trim() !== '') {
-      whereClause += ` AND (p.Paciente_Nome LIKE ? OR p.Codigo LIKE ? OR p.cpf LIKE ?)`;
+      whereClause += ` AND (p.nome LIKE ? OR p.codigo LIKE ? OR p.cpf LIKE ?)`;
       const searchTerm = `%${search.trim()}%`;
       searchParams.push(searchTerm, searchTerm, searchTerm);
     }
@@ -229,18 +266,16 @@ export class PacienteModel {
     const baseSelectQuery = `
       SELECT 
         p.*,
-        o.nome as operadora_nome,
-        pr.nome as prestador_nome
-      FROM Pacientes_Clinica p
-      LEFT JOIN Operadoras o ON p.Operadora = o.id
-      LEFT JOIN Prestadores pr ON p.Prestador = pr.id
+        o.nome as operadora_nome
+      FROM pacientes p
+      LEFT JOIN operadoras o ON p.operadora_id = o.id
       ${whereClause}
       ORDER BY p.created_at DESC
     `;
     
     const countQuery = `
       SELECT COUNT(*) as total 
-      FROM Pacientes_Clinica p 
+      FROM pacientes p 
       ${whereClause}
     `;
     
@@ -271,7 +306,7 @@ export class PacienteModel {
     }
   }
   
-  // Criar paciente
+  // Criar paciente (novo schema: tabela 'pacientes')
   static async create(pacienteData: PacienteCreateInput): Promise<Paciente> {
     logDev('🔧 Dados recebidos para criação:', pacienteData);
     
@@ -281,9 +316,15 @@ export class PacienteModel {
         throw new Error(`Dados inválidos: ${validationErrors.join(', ')}`);
     }
     
-    // Resolver Operadora e Prestador
-    const operadoraId = await resolveIdByName('Operadoras', pacienteData.Operadora, 1);
-    const prestadorId = await resolveIdByName('Prestadores', pacienteData.Prestador, 1);
+    // Resolver Operadora (ID numérico, quando informado)
+    let operadoraId: number | null = null;
+    if (pacienteData.Operadora !== undefined && pacienteData.Operadora !== null) {
+      if (typeof pacienteData.Operadora === 'number') operadoraId = pacienteData.Operadora;
+      else {
+        const parsed = parseInt(pacienteData.Operadora as any, 10);
+        operadoraId = Number.isFinite(parsed) ? parsed : null;
+      }
+    }
     
     // Converter e validar datas
     const dataNascimento = convertDateToMySQL(pacienteData.Data_Nascimento);
@@ -316,58 +357,69 @@ export class PacienteModel {
         dataPrimeiraSolicitacao
     });
     
+    // Montar JSONs conforme novo schema
+    const contatosJson = ((): any => {
+      const obj: any = {};
+      if (pacienteData.telefone) obj.telefone = pacienteData.telefone;
+      if (pacienteData.email) obj.email = pacienteData.email;
+      return Object.keys(obj).length ? JSON.stringify(obj) : null;
+    })();
+
+    const contatoEmergenciaJson = ((): any => {
+      const obj: any = {};
+      if (pacienteData.contato_emergencia_nome) obj.nome = pacienteData.contato_emergencia_nome;
+      if (pacienteData.contato_emergencia_telefone) obj.telefone = pacienteData.contato_emergencia_telefone;
+      return Object.keys(obj).length ? JSON.stringify(obj) : null;
+    })();
+
+    const enderecoJson = ((): any => {
+      const obj: any = {};
+      if (pacienteData.endereco) obj.endereco = pacienteData.endereco;
+      if (pacienteData.endereco_rua) obj.rua = pacienteData.endereco_rua;
+      if (pacienteData.endereco_numero) obj.numero = pacienteData.endereco_numero;
+      if (pacienteData.endereco_complemento) obj.complemento = pacienteData.endereco_complemento;
+      if (pacienteData.endereco_bairro) obj.bairro = pacienteData.endereco_bairro;
+      if (pacienteData.endereco_cidade) obj.cidade = pacienteData.endereco_cidade;
+      if (pacienteData.endereco_estado) obj.estado = pacienteData.endereco_estado;
+      if (cep) obj.cep = cep;
+      return Object.keys(obj).length ? JSON.stringify(obj) : null;
+    })();
+
     const insertColumns = [
-      'clinica_id', 'Paciente_Nome', 'Operadora', 'Prestador', 'Codigo',
-      'Data_Nascimento', 'Sexo', 'Cid_Diagnostico', 'Data_Primeira_Solicitacao',
-      'cpf', 'rg', 'telefone', 'endereco', 'email', 'nome_responsavel',
-      'telefone_responsavel', 'plano_saude', 'abrangencia', 'numero_carteirinha',
-      'status', 'observacoes', 'stage', 'treatment', 'peso', 'altura', 'setor_prestador',
-      'contato_emergencia_nome', 'contato_emergencia_telefone',
-      'endereco_rua', 'endereco_numero', 'endereco_complemento', 'endereco_bairro',
-      'endereco_cidade', 'endereco_estado', 'endereco_cep'
+      'clinica_id', 'operadora_id', 'codigo', 'nome',
+      'cpf', 'rg', 'data_nascimento', 'sexo', 'cid_diagnostico', 'data_primeira_solicitacao',
+      'stage', 'treatment', 'peso', 'altura', 'status', 'contatos', 'endereco',
+      'plano_saude', 'abrangencia', 'numero_carteirinha', 'contato_emergencia', 'observacoes'
     ];
     const placeholders = insertColumns.map(() => '?').join(', ');
     const insertQuery = `
-      INSERT INTO Pacientes_Clinica (${insertColumns.join(', ')})
+      INSERT INTO pacientes (${insertColumns.join(', ')})
       VALUES (${placeholders})
     `;
     
     const values = [
-        pacienteData.clinica_id || 1, // Valor padrão se não fornecido
-        pacienteData.Paciente_Nome,
+        pacienteData.clinica_id || 1,
         operadoraId,
-        prestadorId,
         codigoValue,
-        dataNascimento, // Data já convertida
+        pacienteData.Paciente_Nome,
+        (pacienteData.cpf || '').replace(/\D/g, '') || null,
+        pacienteData.rg || null,
+        dataNascimento,
         sexo,
         pacienteData.Cid_Diagnostico,
-        dataPrimeiraSolicitacao, // Data já convertida
-        pacienteData.cpf || null,
-        pacienteData.rg || null,
-        pacienteData.telefone || null,
-        pacienteData.endereco || null,
-        pacienteData.email || null,
-        pacienteData.nome_responsavel || null,
-        pacienteData.telefone_responsavel || null,
-        pacienteData.plano_saude || null,
-        pacienteData.abrangencia || null,
-        pacienteData.numero_carteirinha || null,
-        normalizedStatus,
-        pacienteData.observacoes || null,
+        dataPrimeiraSolicitacao,
         pacienteData.stage,
         pacienteData.treatment,
         pacienteData.peso ?? null,
         pacienteData.altura ?? null,
-        pacienteData.setor_prestador || null,
-        pacienteData.contato_emergencia_nome || null,
-        pacienteData.contato_emergencia_telefone || null,
-        pacienteData.endereco_rua || null,
-        pacienteData.endereco_numero || null,
-        pacienteData.endereco_complemento || null,
-        pacienteData.endereco_bairro || null,
-        pacienteData.endereco_cidade || null,
-        pacienteData.endereco_estado || null,
-        cep || null
+        normalizedStatus,
+        contatosJson,
+        enderecoJson,
+        pacienteData.plano_saude || null,
+        pacienteData.abrangencia || null,
+        pacienteData.numero_carteirinha || null,
+        contatoEmergenciaJson,
+        pacienteData.observacoes || null
     ];
     
     logDev('🔧 Valores finais para inserção:', values);
@@ -482,9 +534,9 @@ export class PacienteModel {
     }
   }
   
-  // Deletar paciente
+  // Deletar paciente (novo schema)
   static async delete(id: number): Promise<boolean> {
-    const deleteQuery = `DELETE FROM Pacientes_Clinica WHERE id = ?`;
+    const deleteQuery = `DELETE FROM pacientes WHERE id = ?`;
     
     try {
       const result = await query(deleteQuery, [id]);
@@ -495,9 +547,9 @@ export class PacienteModel {
     }
   }
   
-  // Verificar se código já existe
+  // Verificar se código já existe (novo schema)
   static async checkCodigoExists(codigo: string, excludeId?: number): Promise<boolean> {
-    let checkQuery = `SELECT id FROM Pacientes_Clinica WHERE Codigo = ?`;
+    let checkQuery = `SELECT id FROM pacientes WHERE codigo = ?`;
     let params: any[] = [codigo];
     
     if (excludeId) {
@@ -514,10 +566,11 @@ export class PacienteModel {
     }
   }
   
-  // Verificar se CPF já existe
+  // Verificar se CPF já existe (novo schema) – normaliza máscara e consulta tabela correta
   static async checkCpfExists(cpf: string, excludeId?: number): Promise<boolean> {
-    let checkQuery = `SELECT id FROM Pacientes_Clinica WHERE cpf = ?`;
-    let params: any[] = [cpf];
+    const digits = (cpf || '').replace(/\D/g, '');
+    let checkQuery = `SELECT id FROM pacientes WHERE cpf = ?`;
+    let params: any[] = [digits];
     
     if (excludeId) {
       checkQuery += ` AND id != ?`;
@@ -533,6 +586,60 @@ export class PacienteModel {
     }
   }
 
+  // Buscar pacientes por operadora (via clínicas vinculadas)
+  static async findByOperadoraId(operadoraId: number, params: PaginationParams): Promise<PaginatedResponse<Paciente>> {
+    const { page = 1, limit = 10, search = '' } = params;
+    const offset = (page - 1) * limit;
+
+    let whereClause = `WHERE c.operadora_id = ?`;
+    const searchParams: any[] = [operadoraId];
+
+    if (search && search.trim() !== '') {
+      whereClause += ` AND (p.nome LIKE ? OR p.codigo LIKE ? OR p.cpf LIKE ?)`;
+      const searchTerm = `%${search.trim()}%`;
+      searchParams.push(searchTerm, searchTerm, searchTerm);
+    }
+
+    const baseSelectQuery = `
+      SELECT 
+        p.*, c.nome as clinica_nome, c.codigo as clinica_codigo, o.nome as operadora_nome
+      FROM pacientes p
+      INNER JOIN clinicas c ON p.clinica_id = c.id
+      LEFT JOIN operadoras o ON c.operadora_id = o.id
+      ${whereClause}
+      ORDER BY p.created_at DESC
+    `;
+
+    const countQuery = `
+      SELECT COUNT(*) as total 
+      FROM pacientes p 
+      INNER JOIN clinicas c ON p.clinica_id = c.id
+      ${whereClause}
+    `;
+
+    try {
+      const [countResult, patients] = await Promise.all([
+        query(countQuery, searchParams),
+        queryWithLimit(baseSelectQuery, searchParams, limit, offset)
+      ]);
+
+      const total = countResult[0]?.total || 0;
+      const totalPages = Math.ceil(total / limit);
+
+      return {
+        data: patients,
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total,
+          totalPages
+        }
+      };
+    } catch (error) {
+      console.error('Erro ao buscar pacientes por operadora:', error);
+      throw new Error('Erro ao buscar pacientes por operadora');
+    }
+  }
   // Contar pacientes
   static async count(where?: any): Promise<number> {
     try {
@@ -556,17 +663,18 @@ export class PacienteModel {
   // Contar pacientes por operadora
   static async countByOperadora(operadoraId: number): Promise<number> {
     try {
-      const result = await query(`
-        SELECT COUNT(*) as count
-        FROM Pacientes_Clinica p
-        INNER JOIN Clinicas c ON p.clinica_id = c.id
+      const queryStr = `
+        SELECT COUNT(*) as count 
+        FROM pacientes p
+        INNER JOIN clinicas c ON p.clinica_id = c.id
         WHERE c.operadora_id = ?
-      `, [operadoraId]);
-
+      `;
+      const result = await query(queryStr, [operadoraId]);
       return result[0]?.count || 0;
     } catch (error) {
       console.error('Erro ao contar pacientes por operadora:', error);
       return 0;
     }
   }
+
 }

@@ -84,6 +84,7 @@ export interface ClinicaCreateInput {
   usuario?: string;
   senha?: string;
   status?: ClinicStatus;
+  operadora_id?: number;
 }
 
 export interface ClinicaUpdateInput {
@@ -106,6 +107,7 @@ export interface ClinicaUpdateInput {
   usuario?: string;
   senha?: string;
   status?: ClinicStatus;
+  operadora_id?: number;
 }
 
 export interface ClinicaProfile {

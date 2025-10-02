@@ -18,6 +18,7 @@ export interface OperadoraCreateInput {
   cnpj?: string;
   status?: OperadoraStatus;
   email?: string;
+  username?: string;
   senha?: string;
 }
 

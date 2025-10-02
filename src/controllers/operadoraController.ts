@@ -1,6 +1,8 @@
 // src/controllers/operadoraController.ts
 
 import { Request, Response } from 'express';
+import bcrypt from 'bcryptjs';
+import { query } from '../config/database';
 import { OperadoraModel } from '../models/Operadora';
 import { 
   OperadoraCreateInput, 
@@ -119,39 +121,102 @@ export class OperadoraController {
         return;
       }
       
+      // Gerar credenciais automaticamente se não fornecidas
+      let email = operadoraData.email;
+      let username = operadoraData.username;
+      let senhaOriginal = operadoraData.senha;
+      let senhaHash = operadoraData.senha;
+      
+      if (!email) {
+        // Gerar email baseado no código (ex: "UNI001" -> "uni001@operadora.com")
+        email = `${operadoraData.codigo.toLowerCase().replace(/[^a-z0-9]/g, '')}@operadora.com`;
+        console.log('🔧 Email gerado automaticamente:', email);
+      }
+      
+      if (!username) {
+        // Gerar username baseado no código
+        username = operadoraData.codigo.toLowerCase().replace(/[^a-z0-9]/g, '');
+        console.log('🔧 Username gerado automaticamente:', username);
+      }
+      
+      if (!senhaOriginal) {
+        // Gerar senha padrão: codigo@2025
+        senhaOriginal = `${operadoraData.codigo}@2025`;
+        console.log('🔧 Senha gerada automaticamente (formato: codigo@2025)');
+      }
+      
+      // Hash da senha
+      senhaHash = await bcrypt.hash(senhaOriginal, 10);
+      
       const novaOperadora = await OperadoraModel.create(operadoraData);
       
       console.log('✅ Operadora criada com sucesso:', novaOperadora.nome);
       
-      // Se email e senha foram fornecidos, criar usuário da operadora
-      if (operadoraData.email && operadoraData.senha) {
-        try {
-          console.log('🔧 Criando usuário da operadora...');
-          
-          // Importar o modelo de usuário da operadora
-          const { OperadoraUserModel } = await import('../models/OperadoraUser');
-          
-          const usuarioOperadora = await OperadoraUserModel.create({
-            nome: operadoraData.nome,
-            email: operadoraData.email,
-            password: operadoraData.senha, // Corrigir nome do campo
-            role: 'operadora_admin',
-            operadora_id: novaOperadora.id!
-          });
-          
-          console.log('✅ Usuário da operadora criado com sucesso:', usuarioOperadora.email);
-        } catch (userError) {
-          console.error('⚠️ Erro ao criar usuário da operadora:', userError);
-          console.error('⚠️ Detalhes do erro:', userError);
-          // Não falha a criação da operadora se o usuário não for criado
-          // Mas vamos logar o erro para debug
-        }
+      // SEMPRE criar usuário na tabela usuarios para login
+      try {
+        console.log('🔧 Criando usuário na tabela usuarios...');
+        console.log('   - Email:', email);
+        console.log('   - Username:', username);
+        console.log('   - Operadora ID:', novaOperadora.id);
+        
+        const insertUserQuery = `
+          INSERT INTO usuarios (
+            nome,
+            email,
+            username, 
+            password_hash, 
+            role, 
+            operadora_id,
+            status, 
+            created_at, 
+            updated_at
+          )
+          VALUES (?, ?, ?, ?, 'operadora_admin', ?, 'ativo', NOW(), NOW())
+        `;
+        
+        const result = await query(insertUserQuery, [
+          novaOperadora.nome,
+          email,
+          username,
+          senhaHash, 
+          novaOperadora.id
+        ]);
+        
+        console.log('✅ Usuário criado na tabela usuarios com ID:', result.insertId);
+        console.log('📋 Credenciais de acesso:');
+        console.log('   - Email:', email);
+        console.log('   - Username:', username);
+        console.log('   - Senha:', senhaOriginal);
+      } catch (userError) {
+        console.error('❌ ERRO CRÍTICO ao criar usuário na tabela usuarios:', userError);
+        console.error('❌ Detalhes do erro:', {
+          name: (userError as Error).name,
+          message: (userError as Error).message,
+          stack: (userError as Error).stack
+        });
+        
+        // Retornar erro porque sem usuário a operadora não pode fazer login
+        const response: ApiResponse = {
+          success: false,
+          message: 'Operadora criada mas falhou ao criar usuário de login. Entre em contato com o suporte.',
+          error: (userError as Error).message
+        };
+        res.status(500).json(response);
+        return;
       }
       
       const response: ApiResponse = {
         success: true,
         message: 'Operadora criada com sucesso',
-        data: novaOperadora
+        data: {
+          ...novaOperadora,
+          // Incluir credenciais na resposta para que o admin possa informar à operadora
+          credenciais: {
+            email,
+            username,
+            senha: senhaOriginal
+          }
+        }
       };
       
       res.status(201).json(response);

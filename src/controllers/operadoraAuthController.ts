@@ -2,7 +2,8 @@
 
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
-import { OperadoraUserModel } from '../models/OperadoraUser';
+import bcrypt from 'bcryptjs';
+import { query } from '../config/database';
 import { OperadoraModel } from '../models/Operadora';
 
 export class OperadoraAuthController {
@@ -10,34 +11,64 @@ export class OperadoraAuthController {
   static async login(req: Request, res: Response): Promise<void> {
     try {
       const { email, username, password } = req.body || {};
+      console.log('🔧 Tentativa de login de operadora:', { email, username });
+      
       if ((!email && !username) || !password) {
+        console.log('❌ Credenciais faltando');
         res.status(400).json({ success: false, message: 'Credenciais inválidas' });
         return;
       }
 
-      const user = email
-        ? await OperadoraUserModel.findByEmail(email)
-        : await OperadoraUserModel.findByUsername(username);
-
-      if (!user || user.status !== 'ativo') {
+      // Buscar usuário na tabela usuarios consolidada
+      let userQuery = `
+        SELECT u.*, o.nome as operadora_nome, o.codigo as operadora_codigo, o.status as operadora_status 
+        FROM usuarios u 
+        JOIN operadoras o ON u.operadora_id = o.id 
+        WHERE u.status = 'ativo' 
+        AND u.role IN ('operadora_admin', 'operadora_user')
+      `;
+      
+      let params: any[] = [];
+      
+      if (email) {
+        userQuery += ' AND u.email = ?';
+        params.push(email);
+      } else {
+        userQuery += ' AND u.username = ?';
+        params.push(username);
+      }
+      
+      const users = await query(userQuery, params);
+      
+      if (users.length === 0) {
+        console.log('❌ Usuário não encontrado');
         res.status(401).json({ success: false, message: 'Usuário ou senha inválidos' });
         return;
       }
 
-      const ok = await OperadoraUserModel.verifyPassword(user, password);
-      if (!ok) {
+      const user = users[0];
+      console.log('✅ Usuário encontrado:', user.nome);
+
+      // Verificar senha
+      const passwordMatch = await bcrypt.compare(password, user.password_hash);
+      if (!passwordMatch) {
+        console.log('❌ Senha inválida');
         res.status(401).json({ success: false, message: 'Usuário ou senha inválidos' });
         return;
       }
 
-      // Buscar dados da operadora
-      const operadora = await OperadoraModel.findById(user.operadora_id);
-      if (!operadora || operadora.status !== 'ativo') {
+      // Verificar se operadora está ativa
+      if (user.operadora_status !== 'ativo') {
+        console.log('❌ Operadora inativa:', user.operadora_nome);
         res.status(401).json({ success: false, message: 'Operadora inativa ou não encontrada' });
         return;
       }
 
-      await OperadoraUserModel.updateLastLogin(user.id);
+      // Atualizar último login
+      await query(
+        'UPDATE usuarios SET last_login = NOW() WHERE id = ?',
+        [user.id]
+      );
       
       // Gerar access token (15 minutos) e refresh token (30 dias)
       const accessPayload = { 
@@ -55,6 +86,8 @@ export class OperadoraAuthController {
       const accessToken = jwt.sign(accessPayload, process.env.JWT_SECRET || 'dev-secret', { expiresIn: '15m' });
       const refreshToken = jwt.sign(refreshPayload, process.env.JWT_SECRET || 'dev-secret', { expiresIn: '30d' });
       
+      console.log('✅ Login de operadora realizado com sucesso:', user.nome);
+      
       res.json({ 
         success: true, 
         accessToken, 
@@ -67,14 +100,14 @@ export class OperadoraAuthController {
           role: user.role, 
           operadora_id: user.operadora_id,
           operadora: {
-            id: operadora.id,
-            nome: operadora.nome,
-            codigo: operadora.codigo
+            id: user.operadora_id,
+            nome: user.operadora_nome,
+            codigo: user.operadora_codigo
           }
         } 
       });
     } catch (error) {
-      console.error('Erro no login da operadora:', error);
+      console.error('❌ Erro no login da operadora:', error);
       res.status(500).json({ success: false, message: 'Erro ao autenticar' });
     }
   }
@@ -97,16 +130,24 @@ export class OperadoraAuthController {
         return;
       }
 
-      // Buscar usuário
-      const user = await OperadoraUserModel.findById(decoded.id);
-      if (!user || user.status !== 'ativo') {
+      // Buscar usuário na tabela usuarios consolidada
+      const users = await query(`
+        SELECT u.*, o.nome as operadora_nome, o.codigo as operadora_codigo, o.status as operadora_status 
+        FROM usuarios u 
+        JOIN operadoras o ON u.operadora_id = o.id 
+        WHERE u.id = ? AND u.status = 'ativo' 
+        AND u.role IN ('operadora_admin', 'operadora_user')
+      `, [decoded.id]);
+      
+      if (users.length === 0) {
         res.status(401).json({ success: false, message: 'Usuário não encontrado ou inativo' });
         return;
       }
 
+      const user = users[0];
+
       // Verificar se operadora ainda está ativa
-      const operadora = await OperadoraModel.findById(user.operadora_id);
-      if (!operadora || operadora.status !== 'ativo') {
+      if (user.operadora_status !== 'ativo') {
         res.status(401).json({ success: false, message: 'Operadora inativa' });
         return;
       }
@@ -165,18 +206,21 @@ export class OperadoraAuthController {
         return;
       }
 
-      const user = await OperadoraUserModel.findById(payload.id);
-      if (!user) {
+      // Buscar usuário na tabela usuarios consolidada
+      const users = await query(`
+        SELECT u.*, o.nome as operadora_nome, o.codigo as operadora_codigo, o.status as operadora_status 
+        FROM usuarios u 
+        JOIN operadoras o ON u.operadora_id = o.id 
+        WHERE u.id = ? AND u.status = 'ativo' 
+        AND u.role IN ('operadora_admin', 'operadora_user')
+      `, [payload.id]);
+      
+      if (users.length === 0) {
         res.status(404).json({ success: false, message: 'Usuário não encontrado' });
         return;
       }
 
-      // Buscar dados da operadora
-      const operadora = await OperadoraModel.findById(user.operadora_id);
-      if (!operadora) {
-        res.status(404).json({ success: false, message: 'Operadora não encontrada' });
-        return;
-      }
+      const user = users[0];
 
       res.json({ 
         success: true, 
@@ -188,9 +232,9 @@ export class OperadoraAuthController {
           role: user.role, 
           operadora_id: user.operadora_id,
           operadora: {
-            id: operadora.id,
-            nome: operadora.nome,
-            codigo: operadora.codigo
+            id: user.operadora_id,
+            nome: user.operadora_nome,
+            codigo: user.operadora_codigo
           }
         } 
       });
@@ -214,8 +258,8 @@ export class OperadoraAuthController {
       }
 
       // Verificar se operadora existe e está ativa
-      const operadora = await OperadoraModel.findById(operadora_id);
-      if (!operadora || operadora.status !== 'ativo') {
+      const operadoras = await query('SELECT * FROM operadoras WHERE id = ? AND status = ?', [operadora_id, 'ativo']);
+      if (operadoras.length === 0) {
         res.status(400).json({ 
           success: false, 
           message: 'Operadora não encontrada ou inativa' 
@@ -224,39 +268,41 @@ export class OperadoraAuthController {
       }
 
       // Verificar se email já existe
-      const existsEmail = await OperadoraUserModel.checkEmailExists(email);
-      if (existsEmail) {
+      const existingEmails = await query('SELECT id FROM usuarios WHERE email = ?', [email]);
+      if (existingEmails.length > 0) {
         res.status(409).json({ success: false, message: 'E-mail já em uso' });
         return;
       }
 
       // Verificar se username já existe (se fornecido)
       if (username) {
-        const existsUser = await OperadoraUserModel.checkUsernameExists(username);
-        if (existsUser) {
+        const existingUsers = await query('SELECT id FROM usuarios WHERE username = ?', [username]);
+        if (existingUsers.length > 0) {
           res.status(409).json({ success: false, message: 'Username já em uso' });
           return;
         }
       }
 
-      const created = await OperadoraUserModel.create({ 
-        nome, 
-        email, 
-        username, 
-        password, 
-        operadora_id,
-        role: role || 'operadora_user'
-      });
+      // Hash da senha
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // Inserir usuário na tabela usuarios consolidada
+      const result = await query(`
+        INSERT INTO usuarios (nome, email, username, password_hash, operadora_id, role, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'ativo', NOW(), NOW())
+      `, [nome, email, username || null, hashedPassword, operadora_id, role || 'operadora_user']);
+
+      const userId = result.insertId;
 
       res.status(201).json({ 
         success: true, 
         user: { 
-          id: created.id, 
-          nome: created.nome, 
-          email: created.email, 
-          username: created.username,
-          role: created.role, 
-          operadora_id: created.operadora_id 
+          id: userId, 
+          nome, 
+          email, 
+          username,
+          role: role || 'operadora_user', 
+          operadora_id 
         } 
       });
     } catch (error) {
@@ -277,17 +323,23 @@ export class OperadoraAuthController {
       }
 
       // Verificar se operadora existe
-      const operadora = await OperadoraModel.findById(operadoraIdNum);
-      if (!operadora) {
+      const operadoras = await query('SELECT * FROM operadoras WHERE id = ?', [operadoraIdNum]);
+      if (operadoras.length === 0) {
         res.status(404).json({ success: false, message: 'Operadora não encontrada' });
         return;
       }
 
-      const users = await OperadoraUserModel.findByOperadora(operadoraIdNum);
+      // Buscar usuários da operadora na tabela usuarios consolidada
+      const users = await query(`
+        SELECT id, nome, email, username, role, status, created_at, last_login
+        FROM usuarios 
+        WHERE operadora_id = ? AND role IN ('operadora_admin', 'operadora_user')
+        ORDER BY nome ASC
+      `, [operadoraIdNum]);
       
       res.json({ 
         success: true, 
-        users: users.map(user => ({
+        users: users.map((user: any) => ({
           id: user.id,
           nome: user.nome,
           email: user.email,

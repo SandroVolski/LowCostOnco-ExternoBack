@@ -19,4 +19,9 @@ router.put('/admin/:id', authenticateToken, requireRole(['admin']), OperadoraCon
 // Deletar operadora (para administradores)
 router.delete('/admin/:id', authenticateToken, requireRole(['admin']), OperadoraController.deleteOperadora);     // DELETE /api/operadoras/admin/:id
 
+// 🆕 ENDPOINTS PÚBLICOS PARA CLÍNICA (placeholders funcionais)
+router.get('/credenciadas', authenticateToken, (req, res) => {
+  res.json({ success: true, message: 'OK', data: [] });
+});
+
 export default router;

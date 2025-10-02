@@ -159,6 +159,11 @@ app.use('/api/logs', logRoutes);
 app.use('/api/analysis', authenticateToken, cacheMiddleware(), analysisRoutes);
 app.use('/api/admin', authenticateToken, cacheMiddleware(), adminRoutes);
 
+// 🆕 Compatibilidade com frontend: lista de especialidades (placeholder)
+app.get('/api/especialidades', authenticateToken, (req, res) => {
+  res.json({ success: true, message: 'OK', data: [] });
+});
+
 // Rota de teste para verificar conexão com banco
 app.get('/api/test-db', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');

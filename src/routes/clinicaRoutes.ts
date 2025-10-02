@@ -15,6 +15,11 @@ router.get('/profile', authenticateToken, ClinicaController.getProfile);        
 router.put('/profile', authenticateToken, ClinicaController.updateProfile);        // PUT /api/clinicas/profile
 router.get('/por-operadora', authenticateToken, ClinicaController.getClinicasPorOperadora); // GET /api/clinicas/por-operadora
 
+// 🆕 Placeholders para listas usadas no perfil (evitar 404 até implementar)
+router.get('/especialidades', authenticateToken, (req, res) => {
+  res.json({ success: true, message: 'OK', data: [] });
+});
+
 // Rotas para responsáveis técnicos
 router.post('/responsaveis', authenticateToken, ClinicaController.addResponsavel);       // POST /api/clinicas/responsaveis
 router.put('/responsaveis/:id', authenticateToken, ClinicaController.updateResponsavel); // PUT /api/clinicas/responsaveis/:id
