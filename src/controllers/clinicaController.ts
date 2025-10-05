@@ -150,16 +150,16 @@ export class ClinicaController {
         if (create && create.length > 0) {
           console.log('➕ Criando', create.length, 'novos responsáveis');
           for (const responsavelData of create) {
-            // Verificar se CRM já existe na clínica
-            const crmExists = await ResponsavelTecnicoModel.checkCrmExists(
+            // Verificar se registro já existe na clínica
+            const registroExists = await ResponsavelTecnicoModel.checkRegistroExists(
               clinicaId, 
-              responsavelData.crm
+              responsavelData.registro_conselho
             );
-            if (crmExists) {
-              console.log('❌ CRM já existe:', responsavelData.crm);
+            if (registroExists) {
+              console.log('❌ Registro já existe:', responsavelData.registro_conselho);
               const response: ApiResponse = {
                 success: false,
-                message: `CRM ${responsavelData.crm} já está cadastrado nesta clínica`
+                message: `Registro ${responsavelData.registro_conselho} já está cadastrado nesta clínica`
               };
               res.status(400).json(response);
               return;
@@ -176,17 +176,17 @@ export class ClinicaController {
           console.log('🔄 Atualizando', update.length, 'responsáveis');
           for (const updateItem of update) {
             // Verificar se CRM já existe na clínica (excluindo o próprio)
-            if (updateItem.data.crm) {
-              const crmExists = await ResponsavelTecnicoModel.checkCrmExists(
-                clinicaId, 
-                updateItem.data.crm, 
+            if (updateItem.data.registro_conselho) {
+              const registroExists = await ResponsavelTecnicoModel.checkRegistroExists(
+                clinicaId,
+                updateItem.data.registro_conselho,
                 updateItem.id
               );
-              if (crmExists) {
-                console.log('❌ CRM já existe (update):', updateItem.data.crm);
+              if (registroExists) {
+                console.log('❌ Registro já existe (update):', updateItem.data.registro_conselho);
                 const response: ApiResponse = {
                   success: false,
-                  message: `CRM ${updateItem.data.crm} já está cadastrado nesta clínica`
+                  message: `Registro ${updateItem.data.registro_conselho} já está cadastrado nesta clínica`
                 };
                 res.status(400).json(response);
                 return;
@@ -522,23 +522,23 @@ export class ClinicaController {
       console.log('👨‍⚕️ Dados do responsável:', responsavelData);
       
       // Validações básicas
-      if (!responsavelData.nome || !responsavelData.crm || !responsavelData.especialidade) {
+      if (!responsavelData.nome || !responsavelData.registro_conselho || !responsavelData.especialidade_principal) {
         console.log('❌ Dados obrigatórios faltando');
         const response: ApiResponse = {
           success: false,
-          message: 'Nome, CRM e especialidade são obrigatórios'
+          message: 'Nome, Registro do Conselho e especialidade principal são obrigatórios'
         };
         res.status(400).json(response);
         return;
       }
       
-      // Verificar se CRM já existe na clínica
-      const crmExists = await ResponsavelTecnicoModel.checkCrmExists(clinicaId, responsavelData.crm);
-      if (crmExists) {
-        console.log('❌ CRM já existe:', responsavelData.crm);
+      // Verificar se Registro do Conselho já existe na clínica
+      const registroExists = await ResponsavelTecnicoModel.checkRegistroExists(clinicaId, responsavelData.registro_conselho);
+      if (registroExists) {
+        console.log('❌ Registro do Conselho já existe:', responsavelData.registro_conselho);
         const response: ApiResponse = {
           success: false,
-          message: 'CRM já está cadastrado nesta clínica'
+          message: 'Registro do Conselho já está cadastrado nesta clínica'
         };
         res.status(400).json(response);
         return;
@@ -599,18 +599,18 @@ export class ClinicaController {
         return;
       }
       
-      // Verificar se CRM já existe na clínica (se estiver sendo atualizado)
-      if (responsavelData.crm) {
-        const crmExists = await ResponsavelTecnicoModel.checkCrmExists(
+      // Verificar se registro já existe na clínica (se estiver sendo atualizado)
+      if (responsavelData.registro_conselho) {
+        const registroExists = await ResponsavelTecnicoModel.checkRegistroExists(
           clinicaId, 
-          responsavelData.crm, 
+          responsavelData.registro_conselho, 
           id
         );
-        if (crmExists) {
-          console.log('❌ CRM já existe (update):', responsavelData.crm);
+        if (registroExists) {
+          console.log('❌ Registro já existe (update):', responsavelData.registro_conselho);
           const response: ApiResponse = {
             success: false,
-            message: 'CRM já está cadastrado nesta clínica'
+            message: 'Registro já está cadastrado nesta clínica'
           };
           res.status(400).json(response);
           return;

@@ -7,11 +7,24 @@ export interface ResponsavelTecnico {
   id?: number;
   clinica_id: number;
   nome: string;
-  crm: string;
-  especialidade: string;
+  tipo_profissional: 'medico' | 'nutricionista' | 'enfermeiro' | 'farmaceutico' | 'terapeuta_ocupacional';
+  registro_conselho: string; // Substitui CRM
+  uf_registro: string;
+  especialidade_principal: string;
+  rqe_principal?: string;
+  especialidade_secundaria?: string;
+  rqe_secundaria?: string;
+  cnes: string;
   telefone?: string;
   email?: string;
-  status?: ResponsavelStatus;
+  responsavel_tecnico: boolean;
+  operadoras_habilitadas?: number[]; // IDs das operadoras
+  documentos?: {
+    carteira_conselho?: string;
+    diploma?: string;
+    comprovante_especializacao?: string;
+  };
+  status: ResponsavelStatus;
   created_at?: string;
   updated_at?: string;
 }
@@ -19,28 +32,61 @@ export interface ResponsavelTecnico {
 export interface ResponsavelTecnicoCreateInput {
   clinica_id: number;
   nome: string;
-  crm: string;
-  especialidade: string;
+  tipo_profissional: 'medico' | 'nutricionista' | 'enfermeiro' | 'farmaceutico' | 'terapeuta_ocupacional';
+  registro_conselho: string;
+  uf_registro: string;
+  especialidade_principal: string;
+  rqe_principal?: string;
+  especialidade_secundaria?: string;
+  rqe_secundaria?: string;
+  cnes: string;
   telefone?: string;
   email?: string;
+  responsavel_tecnico: boolean;
+  operadoras_habilitadas?: number[];
+  documentos?: {
+    carteira_conselho?: string;
+    diploma?: string;
+    comprovante_especializacao?: string;
+  };
   status?: ResponsavelStatus;
 }
 
 export interface ResponsavelTecnicoUpdateInput {
   nome?: string;
-  crm?: string;
-  especialidade?: string;
+  tipo_profissional?: 'medico' | 'nutricionista' | 'enfermeiro' | 'farmaceutico' | 'terapeuta_ocupacional';
+  registro_conselho?: string;
+  uf_registro?: string;
+  especialidade_principal?: string;
+  rqe_principal?: string;
+  especialidade_secundaria?: string;
+  rqe_secundaria?: string;
+  cnes?: string;
   telefone?: string;
   email?: string;
+  responsavel_tecnico?: boolean;
+  operadoras_habilitadas?: number[];
+  documentos?: {
+    carteira_conselho?: string;
+    diploma?: string;
+    comprovante_especializacao?: string;
+  };
   status?: ResponsavelStatus;
 }
 
 export interface Clinica {
   id?: number;
   nome: string;
+  razao_social?: string;
   codigo: string;
   cnpj?: string;
+  // Endereço (campo legado, mantido para compatibilidade)
   endereco?: string;
+  // Novos campos de endereço desmembrados
+  endereco_rua?: string;
+  endereco_numero?: string;
+  endereco_bairro?: string;
+  endereco_complemento?: string;
   cidade?: string;
   estado?: string;
   cep?: string;
@@ -51,6 +97,12 @@ export interface Clinica {
   // Novos campos para múltiplos contatos
   telefones?: string[];
   emails?: string[];
+  // Contatos organizados por setor
+  contatos_pacientes?: { telefones?: string[]; emails?: string[] };
+  contatos_administrativos?: { telefones?: string[]; emails?: string[] };
+  contatos_legais?: { telefones?: string[]; emails?: string[] };
+  contatos_faturamento?: { telefones?: string[]; emails?: string[] };
+  contatos_financeiro?: { telefones?: string[]; emails?: string[] };
   website?: string;
   logo_url?: string;
   observacoes?: string;
@@ -66,9 +118,16 @@ export interface Clinica {
 
 export interface ClinicaCreateInput {
   nome: string;
+  razao_social?: string;
   codigo: string;
   cnpj?: string;
+  // Endereço (campo legado)
   endereco?: string;
+  // Novos campos de endereço desmembrados
+  endereco_rua?: string;
+  endereco_numero?: string;
+  endereco_bairro?: string;
+  endereco_complemento?: string;
   cidade?: string;
   estado?: string;
   cep?: string;
@@ -78,6 +137,12 @@ export interface ClinicaCreateInput {
   // Novos campos para múltiplos contatos
   telefones?: string[];
   emails?: string[];
+  // Contatos organizados por setor
+  contatos_pacientes?: { telefones?: string[]; emails?: string[] };
+  contatos_administrativos?: { telefones?: string[]; emails?: string[] };
+  contatos_legais?: { telefones?: string[]; emails?: string[] };
+  contatos_faturamento?: { telefones?: string[]; emails?: string[] };
+  contatos_financeiro?: { telefones?: string[]; emails?: string[] };
   website?: string;
   logo_url?: string;
   observacoes?: string;
@@ -89,9 +154,16 @@ export interface ClinicaCreateInput {
 
 export interface ClinicaUpdateInput {
   nome?: string;
+  razao_social?: string;
   codigo?: string;
   cnpj?: string;
+  // Endereço (campo legado)
   endereco?: string;
+  // Novos campos de endereço desmembrados
+  endereco_rua?: string;
+  endereco_numero?: string;
+  endereco_bairro?: string;
+  endereco_complemento?: string;
   cidade?: string;
   estado?: string;
   cep?: string;
@@ -101,6 +173,12 @@ export interface ClinicaUpdateInput {
   // Novos campos para múltiplos contatos
   telefones?: string[];
   emails?: string[];
+  // Contatos organizados por setor
+  contatos_pacientes?: { telefones?: string[]; emails?: string[] };
+  contatos_administrativos?: { telefones?: string[]; emails?: string[] };
+  contatos_legais?: { telefones?: string[]; emails?: string[] };
+  contatos_faturamento?: { telefones?: string[]; emails?: string[] };
+  contatos_financeiro?: { telefones?: string[]; emails?: string[] };
   website?: string;
   logo_url?: string;
   observacoes?: string;

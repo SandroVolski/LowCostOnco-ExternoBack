@@ -58,11 +58,21 @@ const prepareContactData = (clinicaData: any): any => {
 const processContactData = (clinica: any): Clinica => {
   const processed = { ...clinica };
   
-  // Processar endereco_completo (JSON)
+  // Processar endereco_completo (JSON) - NOVA ESTRUTURA
   if (clinica.endereco_completo && typeof clinica.endereco_completo === 'string') {
     try {
       const enderecoObj = JSON.parse(clinica.endereco_completo);
-      processed.endereco = enderecoObj.endereco || '';
+      // Suportar ambas estruturas: antiga (endereco) e nova (rua, numero, bairro, complemento)
+      if (enderecoObj.rua || enderecoObj.numero || enderecoObj.bairro) {
+        // Nova estrutura desmembrada
+        processed.endereco_rua = enderecoObj.rua || '';
+        processed.endereco_numero = enderecoObj.numero || '';
+        processed.endereco_bairro = enderecoObj.bairro || '';
+        processed.endereco_complemento = enderecoObj.complemento || '';
+      } else if (enderecoObj.endereco) {
+        // Estrutura antiga (compatibilidade)
+        processed.endereco = enderecoObj.endereco || '';
+      }
       processed.cidade = enderecoObj.cidade || '';
       processed.estado = enderecoObj.estado || '';
       processed.cep = enderecoObj.cep || '';
@@ -71,12 +81,25 @@ const processContactData = (clinica: any): Clinica => {
     }
   }
   
-  // Processar contatos (JSON)
+  // Processar contatos (JSON) - NOVA ESTRUTURA POR SETORES
   if (clinica.contatos && typeof clinica.contatos === 'string') {
     try {
       const contatosObj = JSON.parse(clinica.contatos);
-      processed.telefones = contatosObj.telefones || [];
-      processed.emails = contatosObj.emails || [];
+      
+      // Verificar se é a nova estrutura (por setores) ou antiga (arrays simples)
+      if (contatosObj.pacientes || contatosObj.administrativos || contatosObj.legais || 
+          contatosObj.faturamento || contatosObj.financeiro) {
+        // Nova estrutura por setores
+        processed.contatos_pacientes = contatosObj.pacientes || { telefones: [''], emails: [''] };
+        processed.contatos_administrativos = contatosObj.administrativos || { telefones: [''], emails: [''] };
+        processed.contatos_legais = contatosObj.legais || { telefones: [''], emails: [''] };
+        processed.contatos_faturamento = contatosObj.faturamento || { telefones: [''], emails: [''] };
+        processed.contatos_financeiro = contatosObj.financeiro || { telefones: [''], emails: [''] };
+      } else {
+        // Estrutura antiga (compatibilidade)
+        processed.telefones = contatosObj.telefones || [];
+        processed.emails = contatosObj.emails || [];
+      }
     } catch (error) {
       console.warn('Erro ao processar contatos JSON:', error);
       processed.telefones = [];
@@ -158,10 +181,10 @@ export class ClinicaModel {
       
       const clinica = processContactData(clinicResult[0]);
       
-      // Buscar responsáveis técnicos (novo schema)
+      // Buscar responsáveis técnicos (novo schema) - busca TODOS, ativos e inativos
       const responsaveisQuery = `
         SELECT * FROM responsaveis_tecnicos 
-        WHERE clinica_id = ? AND status = 'ativo'
+        WHERE clinica_id = ?
         ORDER BY created_at ASC
       `;
       const responsaveis = await query(responsaveisQuery, [id]);
@@ -211,31 +234,38 @@ export class ClinicaModel {
   // Criar nova clínica
   static async create(clinicaData: ClinicaCreateInput): Promise<Clinica> {
     try {
-      // Preparar endereco_completo como JSON
+      // Preparar endereco_completo como JSON - NOVA ESTRUTURA
       const enderecoCompleto = JSON.stringify({
-        endereco: clinicaData.endereco || '',
+        rua: clinicaData.endereco_rua || '',
+        numero: clinicaData.endereco_numero || '',
+        bairro: clinicaData.endereco_bairro || '',
+        complemento: clinicaData.endereco_complemento || '',
         cidade: clinicaData.cidade || '',
         estado: clinicaData.estado || '',
         cep: clinicaData.cep || ''
       });
       
-      // Preparar contatos como JSON
+      // Preparar contatos como JSON - NOVA ESTRUTURA POR SETORES
       const contatos = JSON.stringify({
-        telefones: clinicaData.telefones || [],
-        emails: clinicaData.emails || []
+        pacientes: clinicaData.contatos_pacientes || { telefones: [''], emails: [''] },
+        administrativos: clinicaData.contatos_administrativos || { telefones: [''], emails: [''] },
+        legais: clinicaData.contatos_legais || { telefones: [''], emails: [''] },
+        faturamento: clinicaData.contatos_faturamento || { telefones: [''], emails: [''] },
+        financeiro: clinicaData.contatos_financeiro || { telefones: [''], emails: [''] }
       });
       
       const insertQuery = `
         INSERT INTO clinicas (
-          nome, codigo, cnpj, endereco_completo, contatos,
+          nome, razao_social, codigo, cnpj, endereco_completo, contatos,
           website, logo_url, observacoes,
           usuario, senha, status, operadora_id,
           created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
       `;
       
       const values = [
         clinicaData.nome,
+        clinicaData.razao_social || null,
         clinicaData.codigo,
         clinicaData.cnpj || null,
         enderecoCompleto,
@@ -299,6 +329,10 @@ export class ClinicaModel {
         updateFields.push('nome = ?');
         values.push(clinicaData.nome);
       }
+      if (clinicaData.razao_social !== undefined) {
+        updateFields.push('razao_social = ?');
+        values.push(clinicaData.razao_social);
+      }
       if (clinicaData.codigo !== undefined) {
         updateFields.push('codigo = ?');
         values.push(clinicaData.codigo);
@@ -336,11 +370,15 @@ export class ClinicaModel {
         values.push(clinicaData.operadora_id);
       }
       
-      // Processar endereco_completo como JSON
-      if (clinicaData.endereco !== undefined || clinicaData.cidade !== undefined || 
-          clinicaData.estado !== undefined || clinicaData.cep !== undefined) {
+      // Processar endereco_completo como JSON - NOVA ESTRUTURA
+      if (clinicaData.endereco_rua !== undefined || clinicaData.endereco_numero !== undefined || 
+          clinicaData.endereco_bairro !== undefined || clinicaData.endereco_complemento !== undefined ||
+          clinicaData.cidade !== undefined || clinicaData.estado !== undefined || clinicaData.cep !== undefined) {
         const enderecoCompleto = JSON.stringify({
-          endereco: clinicaData.endereco || '',
+          rua: clinicaData.endereco_rua || '',
+          numero: clinicaData.endereco_numero || '',
+          bairro: clinicaData.endereco_bairro || '',
+          complemento: clinicaData.endereco_complemento || '',
           cidade: clinicaData.cidade || '',
           estado: clinicaData.estado || '',
           cep: clinicaData.cep || ''
@@ -349,11 +387,16 @@ export class ClinicaModel {
         values.push(enderecoCompleto);
       }
       
-      // Processar contatos como JSON
-      if (clinicaData.telefones !== undefined || clinicaData.emails !== undefined) {
+      // Processar contatos como JSON - NOVA ESTRUTURA POR SETORES
+      if (clinicaData.contatos_pacientes !== undefined || clinicaData.contatos_administrativos !== undefined ||
+          clinicaData.contatos_legais !== undefined || clinicaData.contatos_faturamento !== undefined ||
+          clinicaData.contatos_financeiro !== undefined) {
         const contatos = JSON.stringify({
-          telefones: clinicaData.telefones || [],
-          emails: clinicaData.emails || []
+          pacientes: clinicaData.contatos_pacientes || { telefones: [''], emails: [''] },
+          administrativos: clinicaData.contatos_administrativos || { telefones: [''], emails: [''] },
+          legais: clinicaData.contatos_legais || { telefones: [''], emails: [''] },
+          faturamento: clinicaData.contatos_faturamento || { telefones: [''], emails: [''] },
+          financeiro: clinicaData.contatos_financeiro || { telefones: [''], emails: [''] }
         });
         updateFields.push('contatos = ?');
         values.push(contatos);
@@ -542,17 +585,29 @@ export class ResponsavelTecnicoModel {
     try {
       const insertQuery = `
         INSERT INTO responsaveis_tecnicos (
-          clinica_id, nome, crm, especialidade, telefone, email, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          clinica_id, nome, tipo_profissional, registro_conselho, uf_registro,
+          especialidade_principal, rqe_principal, especialidade_secundaria, rqe_secundaria,
+          cnes, telefone, email, responsavel_tecnico, operadoras_habilitadas, 
+          documentos, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
       `;
       
       const values = [
         responsavelData.clinica_id,
         responsavelData.nome,
-        responsavelData.crm,
-        responsavelData.especialidade,
+        responsavelData.tipo_profissional,
+        responsavelData.registro_conselho,
+        responsavelData.uf_registro,
+        responsavelData.especialidade_principal,
+        responsavelData.rqe_principal || null,
+        responsavelData.especialidade_secundaria || null,
+        responsavelData.rqe_secundaria || null,
+        responsavelData.cnes,
         responsavelData.telefone || null,
         responsavelData.email || null,
+        responsavelData.responsavel_tecnico,
+        responsavelData.operadoras_habilitadas ? JSON.stringify(responsavelData.operadoras_habilitadas) : null,
+        responsavelData.documentos ? JSON.stringify(responsavelData.documentos) : null,
         responsavelData.status || 'ativo'
       ];
       
@@ -575,9 +630,32 @@ export class ResponsavelTecnicoModel {
   // Buscar responsável por ID (novo schema)
   static async findById(id: number): Promise<ResponsavelTecnico | null> {
     try {
-      const selectQuery = `SELECT * FROM responsaveis_tecnicos WHERE id = ? AND status = 'ativo'`;
+      const selectQuery = `SELECT * FROM responsaveis_tecnicos WHERE id = ?`;
       const result = await query(selectQuery, [id]);
-      return result.length > 0 ? result[0] : null;
+      if (result.length === 0) return null;
+      
+      const responsavel = result[0];
+      
+      // Processar campos JSON
+      if (responsavel.operadoras_habilitadas && typeof responsavel.operadoras_habilitadas === 'string') {
+        try {
+          responsavel.operadoras_habilitadas = JSON.parse(responsavel.operadoras_habilitadas);
+        } catch (error) {
+          console.warn('Erro ao processar operadoras_habilitadas JSON:', error);
+          responsavel.operadoras_habilitadas = [];
+        }
+      }
+      
+      if (responsavel.documentos && typeof responsavel.documentos === 'string') {
+        try {
+          responsavel.documentos = JSON.parse(responsavel.documentos);
+        } catch (error) {
+          console.warn('Erro ao processar documentos JSON:', error);
+          responsavel.documentos = {};
+        }
+      }
+      
+      return responsavel;
     } catch (error) {
       console.error('Erro ao buscar responsável por ID:', error);
       throw new Error('Erro ao buscar responsável');
@@ -589,11 +667,33 @@ export class ResponsavelTecnicoModel {
     try {
       const selectQuery = `
         SELECT * FROM responsaveis_tecnicos 
-        WHERE clinica_id = ? AND status = 'ativo'
+        WHERE clinica_id = ?
         ORDER BY created_at ASC
       `;
       const result = await query(selectQuery, [clinicaId]);
-      return result;
+      
+      // Processar campos JSON para cada responsável
+      return result.map((responsavel: any) => {
+        if (responsavel.operadoras_habilitadas && typeof responsavel.operadoras_habilitadas === 'string') {
+          try {
+            responsavel.operadoras_habilitadas = JSON.parse(responsavel.operadoras_habilitadas);
+          } catch (error) {
+            console.warn('Erro ao processar operadoras_habilitadas JSON:', error);
+            responsavel.operadoras_habilitadas = [];
+          }
+        }
+        
+        if (responsavel.documentos && typeof responsavel.documentos === 'string') {
+          try {
+            responsavel.documentos = JSON.parse(responsavel.documentos);
+          } catch (error) {
+            console.warn('Erro ao processar documentos JSON:', error);
+            responsavel.documentos = {};
+          }
+        }
+        
+        return responsavel;
+      });
     } catch (error) {
       console.error('Erro ao buscar responsáveis da clínica:', error);
       throw new Error('Erro ao buscar responsáveis');
@@ -611,7 +711,13 @@ export class ResponsavelTecnicoModel {
       Object.entries(responsavelData).forEach(([key, value]) => {
         if (value !== undefined && !fieldsToExclude.includes(key)) {
           updateFields.push(`${key} = ?`);
-          values.push(value);
+          
+          // Processar campos JSON
+          if (key === 'operadoras_habilitadas' || key === 'documentos') {
+            values.push(value ? JSON.stringify(value) : null);
+          } else {
+            values.push(value);
+          }
         }
       });
       
@@ -657,12 +763,12 @@ export class ResponsavelTecnicoModel {
     }
   }
   
-  // Verificar se CRM já existe na clínica (novo schema)
+  // Verificar se CRM já existe na clínica (novo schema) - MANTIDO PARA COMPATIBILIDADE
   static async checkCrmExists(clinicaId: number, crm: string, excludeId?: number): Promise<boolean> {
     try {
       let checkQuery = `
         SELECT id FROM responsaveis_tecnicos 
-        WHERE clinica_id = ? AND crm = ? AND status = 'ativo'
+        WHERE clinica_id = ? AND registro_conselho = ? AND status = 'ativo'
       `;
       let params: any[] = [clinicaId, crm];
       
@@ -676,6 +782,28 @@ export class ResponsavelTecnicoModel {
     } catch (error) {
       console.error('Erro ao verificar CRM:', error);
       throw new Error('Erro ao verificar CRM');
+    }
+  }
+
+  // Verificar se Registro do Conselho já existe na clínica (novo schema)
+  static async checkRegistroExists(clinicaId: number, registro: string, excludeId?: number): Promise<boolean> {
+    try {
+      let checkQuery = `
+        SELECT id FROM responsaveis_tecnicos 
+        WHERE clinica_id = ? AND registro_conselho = ? AND status = 'ativo'
+      `;
+      let params: any[] = [clinicaId, registro];
+      
+      if (excludeId) {
+        checkQuery += ` AND id != ?`;
+        params.push(excludeId);
+      }
+      
+      const result = await query(checkQuery, params);
+      return result.length > 0;
+    } catch (error) {
+      console.error('Erro ao verificar Registro do Conselho:', error);
+      throw new Error('Erro ao verificar Registro do Conselho');
     }
   }
 

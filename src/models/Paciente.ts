@@ -316,9 +316,30 @@ export class PacienteModel {
         throw new Error(`Dados inválidos: ${validationErrors.join(', ')}`);
     }
     
-    // Resolver Operadora (ID numérico, quando informado)
+    // SEMPRE buscar operadora_id da clínica, ignorando o valor vindo do frontend
     let operadoraId: number | null = null;
-    if (pacienteData.Operadora !== undefined && pacienteData.Operadora !== null) {
+    
+    if (pacienteData.clinica_id) {
+      try {
+        console.log('🔧 Buscando operadora_id da clínica:', pacienteData.clinica_id);
+        const clinicaResult = await query(
+          'SELECT operadora_id FROM clinicas WHERE id = ?',
+          [pacienteData.clinica_id]
+        );
+        if (clinicaResult.length > 0 && clinicaResult[0].operadora_id) {
+          operadoraId = clinicaResult[0].operadora_id;
+          console.log('✅ operadora_id obtido da clínica:', operadoraId);
+        } else {
+          console.warn('⚠️ Clínica não tem operadora_id configurado');
+        }
+      } catch (error) {
+        console.error('❌ Erro ao buscar operadora_id da clínica:', error);
+      }
+    }
+    
+    // Se ainda não encontrou, tentar usar o valor do frontend (como fallback)
+    if (!operadoraId && pacienteData.Operadora !== undefined && pacienteData.Operadora !== null) {
+      console.warn('⚠️ Usando operadora_id do frontend (pode causar erro se inválido)');
       if (typeof pacienteData.Operadora === 'number') operadoraId = pacienteData.Operadora;
       else {
         const parsed = parseInt(pacienteData.Operadora as any, 10);
@@ -396,6 +417,13 @@ export class PacienteModel {
       INSERT INTO pacientes (${insertColumns.join(', ')})
       VALUES (${placeholders})
     `;
+    
+    // LOG DETALHADO para debug
+    console.log('🔧 ===== DEBUG CRIAÇÃO PACIENTE =====');
+    console.log('🔧 clinica_id:', pacienteData.clinica_id);
+    console.log('🔧 operadora_id (resolvido):', operadoraId);
+    console.log('🔧 Operadora original (frontend):', pacienteData.Operadora);
+    console.log('🔧 =====================================');
     
     const values = [
         pacienteData.clinica_id || 1,

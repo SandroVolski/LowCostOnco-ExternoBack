@@ -11,13 +11,17 @@ export const dbConfig = {
   database: process.env.DB_NAME || 'bd_sistema_clinicas',
   port: parseInt(process.env.DB_PORT || '3306'),
   
-  // Configurações do pool otimizadas
+  // Configurações do pool otimizadas para estabilidade
   waitForConnections: true,
-  connectionLimit: 20, // Aumentado de 10 para 20
-  queueLimit: 10, // Adicionado limite de fila
-  acquireTimeout: 60000, // 60 segundos para adquirir conexão
-  timeout: 60000, // 60 segundos timeout geral
+  connectionLimit: 10, // Reduzido para evitar sobrecarga
+  queueLimit: 5, // Reduzido para evitar filas longas
+  acquireTimeout: 30000, // 30 segundos para adquirir conexão
+  timeout: 30000, // 30 segundos timeout geral
   reconnect: true, // Reconectar automaticamente
+  
+  // Configurações de keep-alive para evitar ECONNRESET
+  keepAliveInitialDelay: 0,
+  enableKeepAlive: true,
   
   // Configurações de performance
   multipleStatements: false, // Desabilitar múltiplas statements por segurança
@@ -84,7 +88,7 @@ const pingPool = async (): Promise<void> => {
   }
 };
 
-const withRetry = async <T>(action: () => Promise<T>, maxRetries: number = 2): Promise<T> => {
+const withRetry = async <T>(action: () => Promise<T>, maxRetries: number = 3): Promise<T> => {
   let attempt = 0;
   while (true) {
     try {
@@ -95,14 +99,51 @@ const withRetry = async <T>(action: () => Promise<T>, maxRetries: number = 2): P
       }
       attempt++;
       console.warn(`⚠️ Erro transitório no banco (tentativa ${attempt}/${maxRetries}). Retentando...`, (error as any)?.code || (error as any)?.message);
+      
+      // Para ECONNRESET, tentar recriar o pool
+      if ((error as any)?.code === 'ECONNRESET' || /ECONNRESET/i.test((error as any)?.message)) {
+        console.log('🔄 Tentando recriar pool devido a ECONNRESET...');
+        try {
+          await pool.end();
+          // Recriar pool com configuração limpa
+          const newPool = mysql.createPool(dbConfig);
+          Object.assign(pool, newPool);
+        } catch (poolErr) {
+          console.warn('Erro ao recriar pool:', (poolErr as any)?.message);
+        }
+      }
+      
       try {
         await pingPool();
       } catch (pingErr) {
         console.warn('Ping do pool falhou antes do retry:', (pingErr as any)?.code || (pingErr as any)?.message);
       }
-      // Backoff exponencial curto: 100ms, 300ms, 900ms...
-      await sleep(100 * Math.pow(3, attempt - 1));
+      
+      // Backoff exponencial otimizado: 200ms, 600ms, 1800ms
+      const delay = 200 * Math.pow(3, attempt - 1);
+      await sleep(delay);
     }
+  }
+};
+
+// Função para limpar conexões órfãs
+const cleanupOrphanedConnections = async () => {
+  try {
+    // Ping todas as conexões do pool para identificar órfãs
+    const connections = (pool as any)._allConnections || [];
+    const activeConnections = (pool as any)._freeConnections || [];
+    
+    console.log(`🧹 Limpeza de conexões: ${connections.length} total, ${activeConnections.length} ativas`);
+    
+    // Se há muitas conexões inativas, forçar limpeza
+    if (connections.length > 15) {
+      console.log('🧹 Forçando limpeza de conexões órfãs...');
+      await pool.end();
+      // Recriar pool
+      Object.assign(pool, mysql.createPool(dbConfig));
+    }
+  } catch (error) {
+    console.warn('Erro na limpeza de conexões:', (error as any)?.message);
   }
 };
 
@@ -112,8 +153,8 @@ pool.on('connection', (connection: any) => {
   
   // Configurar timeouts para cada conexão
   if (connection.config) {
-    connection.config.queryTimeout = 30000; // 30 segundos para queries
-    connection.config.connectTimeout = 10000; // 10 segundos para conectar
+    connection.config.queryTimeout = 15000; // 15 segundos para queries
+    connection.config.connectTimeout = 5000; // 5 segundos para conectar
   }
 });
 
@@ -128,6 +169,9 @@ pool.on('release', (connection: any) => {
 pool.on('enqueue', () => {
   console.log('⏳ Requisição enfileirada (pool cheio)');
 });
+
+// Limpeza periódica de conexões órfãs a cada 5 minutos
+setInterval(cleanupOrphanedConnections, 5 * 60 * 1000);
 
 // Função para testar a conexão com timeout
 export const testConnection = async (): Promise<boolean> => {
@@ -161,7 +205,7 @@ export const query = async (sql: string, params?: any[]): Promise<any> => {
       const [results] = await Promise.race([
         pool.execute(sql, params || []),
         new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout na query')), 30000)
+          setTimeout(() => reject(new Error('Timeout na query')), 15000) // Reduzido para 15s
         )
       ]);
       return results;
@@ -191,7 +235,7 @@ export const queryWithLimit = async (sql: string, params: any[] = [], limit: num
           ? pool.execute(finalSql, params)
           : pool.query(finalSql),
         new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout na query com limit')), 30000)
+          setTimeout(() => reject(new Error('Timeout na query com limit')), 15000) // Reduzido para 15s
         )
       ]);
       
