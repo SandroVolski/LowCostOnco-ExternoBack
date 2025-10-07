@@ -8,16 +8,13 @@ export const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'bd_sistema_clinicas',
+  database: process.env.DB_NAME || 'bd_onkhos',
   port: parseInt(process.env.DB_PORT || '3306'),
   
   // Configurações do pool otimizadas para estabilidade
   waitForConnections: true,
   connectionLimit: 10, // Reduzido para evitar sobrecarga
   queueLimit: 5, // Reduzido para evitar filas longas
-  acquireTimeout: 30000, // 30 segundos para adquirir conexão
-  timeout: 30000, // 30 segundos timeout geral
-  reconnect: true, // Reconectar automaticamente
   
   // Configurações de keep-alive para evitar ECONNRESET
   keepAliveInitialDelay: 0,

@@ -113,7 +113,7 @@ export const optionalAuth = (req: AuthRequest, res: Response, next: NextFunction
 };
 
 // Middleware de autorização por role
-export const requireRole = (roles: Array<'admin' | 'clinica' | 'operadora' | 'operadora_admin' | 'operadora_user'>) => {
+export const requireRole = (roles: Array<'admin' | 'clinica' | 'operadora' | 'operadora_admin' | 'operadora_user' | 'operator' | 'clinic'>) => {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     const user = req.user as any;
     console.log('🔧 requireRole - User:', user);
@@ -124,11 +124,14 @@ export const requireRole = (roles: Array<'admin' | 'clinica' | 'operadora' | 'op
     // Verificar tanto role quanto tipo para compatibilidade
     const userRole = user?.role || user?.tipo;
     
-    // Mapear roles específicos de operadora para o role genérico 'operadora'
+    // Mapear roles específicos para roles genéricos
     const normalizedUserRole = (userRole === 'operadora_admin' || userRole === 'operadora_user') ? 'operadora' : userRole;
-    const normalizedRequiredRoles = roles.map(role => 
-      (role === 'operadora_admin' || role === 'operadora_user') ? 'operadora' : role
-    );
+    const normalizedRequiredRoles = roles.map(role => {
+      if (role === 'operadora_admin' || role === 'operadora_user') return 'operadora';
+      if (role === 'operator') return 'operator';
+      if (role === 'clinic') return 'clinic';
+      return role;
+    });
     
     if (!user || !userRole || !normalizedRequiredRoles.includes(normalizedUserRole as any)) {
       console.log('❌ requireRole - Acesso negado. Role/Tipo:', userRole, 'Requerido:', roles);

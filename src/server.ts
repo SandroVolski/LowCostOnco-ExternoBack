@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import multer from 'multer';
+import path from 'path';
 import { testConnection, closePool } from './config/database';
 import pacienteRoutes from './routes/pacienteRoutes';
 import solicitacaoRoutes from './routes/solicitacaoRoutes';
@@ -25,6 +27,7 @@ import logRoutes from './routes/logRoutes';
 import mobileRoutes from './routes/mobileRoutes';
 import analysisRoutes from './routes/analysisRoutes';
 import adminRoutes from './routes/adminRoutes';
+import chatRoutes from './routes/chatRoutes';
 
 // Carregar variáveis de ambiente
 dotenv.config();
@@ -67,6 +70,35 @@ app.use('/api/solicitacoes/:id/pdf', (req, res, next) => {
 // Aumentar limite para uploads de arquivos maiores (PDFs)
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Configurar multer para upload de arquivos do chat
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath = path.join(__dirname, '../uploads/chat');
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    // Gerar nome único para o arquivo
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const extension = path.extname(file.originalname);
+    const nameWithoutExt = path.basename(file.originalname, extension);
+    cb(null, `${nameWithoutExt}-${uniqueSuffix}${extension}`);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 50 * 1024 * 1024 // 50MB
+  },
+  fileFilter: (req, file, cb) => {
+    // Permitir todos os tipos de arquivo
+    cb(null, true);
+  }
+});
+
+// Middleware de upload para chat
+app.use('/api/chat/upload', upload.single('file'));
 
 // Middleware de monitoramento de performance (avançado)
 app.use(enhancedPerformanceMonitor);
@@ -158,6 +190,7 @@ app.use('/api/dashboard', authenticateToken, cacheMiddleware(), dashboardRoutes)
 app.use('/api/logs', logRoutes);
 app.use('/api/analysis', authenticateToken, cacheMiddleware(), analysisRoutes);
 app.use('/api/admin', authenticateToken, cacheMiddleware(), adminRoutes);
+app.use('/api/chat', chatRoutes);
 
 // 🆕 Compatibilidade com frontend: lista de especialidades (placeholder)
 app.get('/api/especialidades', authenticateToken, (req, res) => {
