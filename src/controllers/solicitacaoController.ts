@@ -243,11 +243,17 @@ export class SolicitacaoController {
   }
   
   // ✅ GET /api/solicitacoes/:id/pdf - Gerar PDF com suporte para visualização
-  static async generatePDF(req: Request, res: Response): Promise<void> {
+  static async generatePDF(req: AuthRequest, res: Response): Promise<void> {
     try {
       const id = parseInt(req.params.id);
       const isView = req.query.view === 'true';  // 🆕 Parâmetro para visualização
       const isInline = req.query.inline === 'true';  // 🆕 Parâmetro para inline
+      
+      console.log('🔧 generatePDF - Iniciando geração de PDF para solicitação:', id);
+      console.log('🔧 generatePDF - User no request:', req.user);
+      console.log('🔧 generatePDF - Headers authorization:', req.headers.authorization);
+      console.log('📋 Modo:', isView ? 'Visualização' : 'Download');
+      console.log('📋 Inline:', isInline ? 'Sim' : 'Não');
       
       if (isNaN(id)) {
         const response: ApiResponse = {
@@ -257,10 +263,6 @@ export class SolicitacaoController {
         res.status(400).json(response);
         return;
       }
-      
-      console.log('🔧 Iniciando geração de PDF para solicitação:', id);
-      console.log('📋 Modo:', isView ? 'Visualização' : 'Download');
-      console.log('📋 Inline:', isInline ? 'Sim' : 'Não');
       
       // 🆕 CACHE PARA PDFs - Verificar se já existe em cache
       const cacheKey = `pdf_${id}_${isView ? 'view' : 'download'}`;
@@ -514,7 +516,7 @@ export class SolicitacaoController {
   }
   
   // GET /api/solicitacoes/status/:status - Buscar solicitações por status
-  static async getByStatus(req: Request, res: Response): Promise<void> {
+  static async getByStatus(req: AuthRequest, res: Response): Promise<void> {
     try {
       const status = req.params.status;
       

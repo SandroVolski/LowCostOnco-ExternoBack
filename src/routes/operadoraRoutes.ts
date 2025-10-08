@@ -19,7 +19,14 @@ router.put('/admin/:id', authenticateToken, requireRole(['admin']), OperadoraCon
 // Deletar operadora (para administradores)
 router.delete('/admin/:id', authenticateToken, requireRole(['admin']), OperadoraController.deleteOperadora);     // DELETE /api/operadoras/admin/:id
 
-// 🆕 ENDPOINTS PÚBLICOS PARA CLÍNICA (placeholders funcionais)
+// 🆕 ENDPOINTS PÚBLICOS PARA CLÍNICA
+// Listar operadoras para clínicas
+router.get('/', authenticateToken, OperadoraController.getOperadorasForClinica);
+
+// Buscar operadora de uma clínica específica
+router.get('/clinica/:clinicaId', authenticateToken, OperadoraController.getOperadoraByClinica);
+
+// Endpoint placeholder (mantido para compatibilidade)
 router.get('/credenciadas', authenticateToken, (req, res) => {
   res.json({ success: true, message: 'OK', data: [] });
 });

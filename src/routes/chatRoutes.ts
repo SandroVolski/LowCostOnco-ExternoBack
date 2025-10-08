@@ -38,7 +38,7 @@ const upload = multer({
 router.use(authenticateToken);
 
 // Aplicar autorização para operadoras e clínicas
-router.use(requireRole(['operator', 'clinic', 'operadora_admin', 'operadora_user', 'clinica']));
+router.use(requireRole(['operadora', 'clinica', 'operator', 'clinic', 'operadora_admin', 'operadora_user']));
 
 // GET /api/chat/chats - Buscar chats do usuário
 router.get('/chats', ChatOnkhosController.getUserChats);

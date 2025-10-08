@@ -125,11 +125,11 @@ export const requireRole = (roles: Array<'admin' | 'clinica' | 'operadora' | 'op
     const userRole = user?.role || user?.tipo;
     
     // Mapear roles específicos para roles genéricos
-    const normalizedUserRole = (userRole === 'operadora_admin' || userRole === 'operadora_user') ? 'operadora' : userRole;
+    const normalizedUserRole = (userRole === 'operadora_admin' || userRole === 'operadora_user' || userRole === 'operator') ? 'operadora' : 
+                              (userRole === 'clinic') ? 'clinica' : userRole;
     const normalizedRequiredRoles = roles.map(role => {
-      if (role === 'operadora_admin' || role === 'operadora_user') return 'operadora';
-      if (role === 'operator') return 'operator';
-      if (role === 'clinic') return 'clinic';
+      if (role === 'operadora_admin' || role === 'operadora_user' || role === 'operator') return 'operadora';
+      if (role === 'clinic') return 'clinica';
       return role;
     });
     

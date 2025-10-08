@@ -59,9 +59,11 @@ const processContactData = (clinica: any): Clinica => {
   const processed = { ...clinica };
   
   // Processar endereco_completo (JSON) - NOVA ESTRUTURA
-  if (clinica.endereco_completo && typeof clinica.endereco_completo === 'string') {
+  if (clinica.endereco_completo) {
     try {
-      const enderecoObj = JSON.parse(clinica.endereco_completo);
+      const enderecoObj = typeof clinica.endereco_completo === 'string'
+        ? JSON.parse(clinica.endereco_completo)
+        : clinica.endereco_completo;
       // Suportar ambas estruturas: antiga (endereco) e nova (rua, numero, bairro, complemento)
       if (enderecoObj.rua || enderecoObj.numero || enderecoObj.bairro) {
         // Nova estrutura desmembrada
@@ -82,9 +84,11 @@ const processContactData = (clinica: any): Clinica => {
   }
   
   // Processar contatos (JSON) - NOVA ESTRUTURA POR SETORES
-  if (clinica.contatos && typeof clinica.contatos === 'string') {
+  if (clinica.contatos) {
     try {
-      const contatosObj = JSON.parse(clinica.contatos);
+      const contatosObj = typeof clinica.contatos === 'string'
+        ? JSON.parse(clinica.contatos)
+        : clinica.contatos;
       
       // Verificar se é a nova estrutura (por setores) ou antiga (arrays simples)
       if (contatosObj.pacientes || contatosObj.administrativos || contatosObj.legais || 
@@ -588,8 +592,8 @@ export class ResponsavelTecnicoModel {
           clinica_id, nome, tipo_profissional, registro_conselho, uf_registro,
           especialidade_principal, rqe_principal, especialidade_secundaria, rqe_secundaria,
           cnes, telefone, email, responsavel_tecnico, operadoras_habilitadas, 
-          documentos, status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+          documentos, status, crm, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
       `;
       
       const values = [
@@ -608,7 +612,9 @@ export class ResponsavelTecnicoModel {
         responsavelData.responsavel_tecnico,
         responsavelData.operadoras_habilitadas ? JSON.stringify(responsavelData.operadoras_habilitadas) : null,
         responsavelData.documentos ? JSON.stringify(responsavelData.documentos) : null,
-        responsavelData.status || 'ativo'
+        responsavelData.status || 'ativo',
+        // Alguns esquemas antigos exigem 'crm' NOT NULL: use registro_conselho como fallback
+        (responsavelData as any).crm || responsavelData.registro_conselho
       ];
       
       const result = await query(insertQuery, values);

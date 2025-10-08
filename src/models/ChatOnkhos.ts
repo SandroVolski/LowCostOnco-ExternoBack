@@ -368,36 +368,59 @@ export class ChatOnkhosModel {
     }
   }
   
-  // Buscar mensagens de uma conversa
+  // Buscar mensagens de uma conversa (respeita limit/offset)
   static async getMensagensConversa(conversaId: number, limit: number = 50, offset: number = 0): Promise<Mensagem[]> {
     try {
-      // Simplificar a query - usar valores fixos primeiro para testar
       const selectQuery = `
         SELECT * FROM mensagens 
         WHERE conversa_id = ? 
         ORDER BY created_at ASC 
-        LIMIT 50 OFFSET 0
+        LIMIT ? OFFSET ?
       `;
-      
-      console.log('🔧 [MODELO] Buscando mensagens:', { conversaId, limit, offset });
-      console.log('🔧 [MODELO] Tipos:', { 
-        conversaId: typeof conversaId, 
-        limit: typeof limit, 
-        offset: typeof offset 
-      });
-      
-      // Usar apenas o conversaId por enquanto
-      const conversaIdNum = Number(conversaId) || 0;
-      const params = [conversaIdNum];
-      
-      console.log('🔧 [MODELO] Parâmetros processados:', params);
-      console.log('🔧 [MODELO] Tipos dos parâmetros:', params.map(p => typeof p));
-      
-      const result = await query(selectQuery, params);
-      console.log('✅ [MODELO] Resultado da query:', result.length, 'mensagens encontradas');
+      const result = await query(selectQuery, [Number(conversaId) || 0, Number(limit) || 50, Number(offset) || 0]);
       return result;
     } catch (error) {
       console.error('❌ Erro ao buscar mensagens da conversa:', error);
+      return [];
+    }
+  }
+
+  // Buscar últimas N mensagens (mais recentes primeiro, depois reordenar no controller)
+  static async getMensagensRecentes(conversaId: number, limit: number = 50, offset: number = 0): Promise<Mensagem[]> {
+    try {
+      const conv = Number(conversaId) || 0;
+      const lim = Math.max(1, Math.min(500, Number(limit) || 50));
+      const off = Math.max(0, Number(offset) || 0);
+      const selectQuery = `
+        SELECT * FROM mensagens 
+        WHERE conversa_id = ? 
+        ORDER BY created_at DESC 
+        LIMIT ${lim} OFFSET ${off}
+      `;
+      const result = await query(selectQuery, [conv]);
+      return result;
+    } catch (error) {
+      console.error('❌ Erro ao buscar mensagens recentes da conversa:', error);
+      return [];
+    }
+  }
+
+  // Buscar mensagens após um determinado ID (para polling incremental)
+  static async getMensagensAposId(conversaId: number, lastId: number, max: number = 200): Promise<Mensagem[]> {
+    try {
+      const conv = Number(conversaId) || 0;
+      const last = Math.max(0, Number(lastId) || 0);
+      const lim = Math.max(1, Math.min(500, Number(max) || 200));
+      const selectQuery = `
+        SELECT * FROM mensagens 
+        WHERE conversa_id = ? AND id > ?
+        ORDER BY created_at ASC 
+        LIMIT ${lim}
+      `;
+      const result = await query(selectQuery, [conv, last]);
+      return result;
+    } catch (error) {
+      console.error('❌ Erro ao buscar mensagens após ID:', error);
       return [];
     }
   }

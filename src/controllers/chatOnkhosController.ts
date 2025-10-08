@@ -95,6 +95,7 @@ export class ChatOnkhosController {
       const chatId = parseInt(req.params.id);
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
+      const lastId = req.query.last_id ? parseInt(req.query.last_id as string) : undefined;
       const user = (req as any).user;
       
       if (isNaN(chatId)) {
@@ -127,7 +128,18 @@ export class ChatOnkhosController {
         return;
       }
       
-      const messages = await ChatOnkhosModel.getMensagensConversa(chatId, limit, offset);
+      let messages: any[] = [];
+      if (lastId && lastId > 0) {
+        // Polling incremental: buscar somente novas mensagens após last_id
+        messages = await ChatOnkhosModel.getMensagensAposId(chatId, lastId, limit);
+      } else if (offset === 0) {
+        // Primeira carga: pegar últimas 'limit' mensagens e ordenar asc
+        const recentes = await ChatOnkhosModel.getMensagensRecentes(chatId, limit, 0);
+        messages = recentes.reverse();
+      } else {
+        // Paginação convencional
+        messages = await ChatOnkhosModel.getMensagensConversa(chatId, limit, offset);
+      }
       
       console.log('🔧 [CONTROLLER] Mensagens retornadas:', messages.length);
       if (messages.length > 0) {
@@ -144,7 +156,8 @@ export class ChatOnkhosController {
           pagination: {
             limit,
             offset,
-            total: messages.length
+            total: messages.length,
+            last_id: messages.length ? messages[messages.length - 1].id : lastId || null
           }
         }
       };

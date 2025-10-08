@@ -16,10 +16,12 @@ export class PacienteController {
   
   // GET /api/pacientes - Listar todos os pacientes
   static async index(req: AuthRequest, res: Response): Promise<void> {
+    console.log('🔧 PacienteController.index - INICIANDO');
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
       const search = req.query.search as string || '';
+      console.log('🔧 Parâmetros recebidos:', { page, limit, search });
 
       // Se usuário é operadora, listar por operadoraId
       const user: any = req.user;
@@ -46,6 +48,18 @@ export class PacienteController {
       }
 
       const result = await PacienteModel.findByClinicaId(clinicaId, { page, limit, search });
+      
+      // Debug: Verificar campos do médico assistente
+      if (result.data && result.data.length > 0) {
+        console.log('🔧 Debug Controller - Primeiro paciente antes de enviar:');
+        const firstPatient = result.data[0];
+        console.log('  ID:', firstPatient.id);
+        console.log('  Nome:', firstPatient.Paciente_Nome);
+        console.log('  Prestador ID:', (firstPatient as any).prestador_id);
+        console.log('  Médico Assistente Nome:', (firstPatient as any).medico_assistente_nome);
+        console.log('  Médico Assistente Email:', (firstPatient as any).medico_assistente_email);
+        console.log('  Todos os campos:', Object.keys(firstPatient));
+      }
       
       const response: ApiResponse = {
         success: true,

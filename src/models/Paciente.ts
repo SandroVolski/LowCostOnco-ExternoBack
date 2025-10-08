@@ -71,13 +71,30 @@ const resolveIdByName = async (table: 'Operadoras' | 'Prestadores', nameOrId: nu
   if (typeof nameOrId === 'number') return nameOrId;
   const name = nameOrId.toString().trim();
   if (name === '') return defaultId;
+  
+  // Mapear nomes de tabelas para as tabelas reais
+  const tableMap = {
+    'Operadoras': 'operadoras',
+    'Prestadores': 'responsaveis_tecnicos'
+  };
+  
+  const realTable = tableMap[table];
+  if (!realTable) return defaultId;
+  
   // Tenta buscar por nome
-  const rows = await query(`SELECT id FROM ${table} WHERE nome = ? LIMIT 1`, [name]);
+  const rows = await query(`SELECT id FROM ${realTable} WHERE nome = ? LIMIT 1`, [name]);
   if (rows && rows.length > 0) {
     return rows[0].id;
   }
-  // Cria se não existe
-  const insert = await query(`INSERT INTO ${table} (nome) VALUES (?)`, [name]);
+  
+  // Para prestadores, não criar automaticamente (deixar como defaultId)
+  if (table === 'Prestadores') {
+    console.log(`⚠️ Prestador "${name}" não encontrado, usando ID padrão: ${defaultId}`);
+    return defaultId;
+  }
+  
+  // Para operadoras, criar se não existe
+  const insert = await query(`INSERT INTO ${realTable} (nome) VALUES (?)`, [name]);
   return insert.insertId || defaultId;
 };
 
@@ -144,29 +161,13 @@ export class PacienteModel {
       SELECT 
         p.*,
         o.nome as operadora_nome,
-        -- Médico assistente (pega um ativo da clínica)
-        (
-          SELECT rt.nome FROM responsaveis_tecnicos rt 
-          WHERE rt.clinica_id = p.clinica_id AND rt.status = 'ativo'
-          ORDER BY rt.id ASC LIMIT 1
-        ) AS medico_assistente_nome,
-        (
-          SELECT rt.email FROM responsaveis_tecnicos rt 
-          WHERE rt.clinica_id = p.clinica_id AND rt.status = 'ativo'
-          ORDER BY rt.id ASC LIMIT 1
-        ) AS medico_assistente_email,
-        (
-          SELECT rt.telefone FROM responsaveis_tecnicos rt 
-          WHERE rt.clinica_id = p.clinica_id AND rt.status = 'ativo'
-          ORDER BY rt.id ASC LIMIT 1
-        ) AS medico_assistente_telefone,
-        (
-          SELECT rt.especialidade FROM responsaveis_tecnicos rt 
-          WHERE rt.clinica_id = p.clinica_id AND rt.status = 'ativo'
-          ORDER BY rt.id ASC LIMIT 1
-        ) AS medico_assistente_especialidade
+        rt.nome as medico_assistente_nome,
+        rt.email as medico_assistente_email,
+        rt.telefone as medico_assistente_telefone,
+        rt.especialidade as medico_assistente_especialidade
       FROM pacientes p
       LEFT JOIN operadoras o ON p.operadora_id = o.id
+      LEFT JOIN responsaveis_tecnicos rt ON p.prestador_id = rt.id
       ${whereClause}
       ORDER BY p.created_at DESC
     `;
@@ -193,6 +194,19 @@ export class PacienteModel {
       
       logDev(`✅ Sucesso! ${patients.length} pacientes de ${total}`);
       
+      // Debug: Verificar campos do médico assistente
+      if (patients && patients.length > 0) {
+        console.log('🔧 Debug findAll - Primeiro paciente:');
+        const firstPatient = patients[0];
+        console.log('  ID:', firstPatient.id);
+        console.log('  Nome:', firstPatient.nome);
+        console.log('  Prestador ID:', firstPatient.prestador_id);
+        console.log('  Médico Assistente Nome:', firstPatient.medico_assistente_nome);
+        console.log('  Médico Assistente Email:', firstPatient.medico_assistente_email);
+        console.log('  Médico Assistente Telefone:', firstPatient.medico_assistente_telefone);
+        console.log('  Médico Assistente Especialidade:', firstPatient.medico_assistente_especialidade);
+      }
+      
       return {
         data: patients,
         pagination: {
@@ -214,33 +228,30 @@ export class PacienteModel {
       SELECT 
         p.*,
         o.nome as operadora_nome,
-        (
-          SELECT rt.nome FROM responsaveis_tecnicos rt 
-          WHERE rt.clinica_id = p.clinica_id AND rt.status = 'ativo'
-          ORDER BY rt.id ASC LIMIT 1
-        ) AS medico_assistente_nome,
-        (
-          SELECT rt.email FROM responsaveis_tecnicos rt 
-          WHERE rt.clinica_id = p.clinica_id AND rt.status = 'ativo'
-          ORDER BY rt.id ASC LIMIT 1
-        ) AS medico_assistente_email,
-        (
-          SELECT rt.telefone FROM responsaveis_tecnicos rt 
-          WHERE rt.clinica_id = p.clinica_id AND rt.status = 'ativo'
-          ORDER BY rt.id ASC LIMIT 1
-        ) AS medico_assistente_telefone,
-        (
-          SELECT rt.especialidade FROM responsaveis_tecnicos rt 
-          WHERE rt.clinica_id = p.clinica_id AND rt.status = 'ativo'
-          ORDER BY rt.id ASC LIMIT 1
-        ) AS medico_assistente_especialidade
+        rt.nome as medico_assistente_nome,
+        rt.email as medico_assistente_email,
+        rt.telefone as medico_assistente_telefone,
+        rt.especialidade as medico_assistente_especialidade
       FROM pacientes p
       LEFT JOIN operadoras o ON p.operadora_id = o.id
+      LEFT JOIN responsaveis_tecnicos rt ON p.prestador_id = rt.id
       WHERE p.id = ?
     `;
     
     try {
       const result = await query(selectQuery, [id]);
+      console.log('🔧 Debug findById - Resultado da consulta:', result);
+      if (result.length > 0) {
+        const paciente = result[0];
+        console.log('🔧 Debug findById - Paciente encontrado:');
+        console.log('  ID:', paciente.id);
+        console.log('  Nome:', paciente.nome);
+        console.log('  Prestador ID:', paciente.prestador_id);
+        console.log('  Médico Assistente Nome:', paciente.medico_assistente_nome);
+        console.log('  Médico Assistente Email:', paciente.medico_assistente_email);
+        console.log('  Médico Assistente Telefone:', paciente.medico_assistente_telefone);
+        console.log('  Médico Assistente Especialidade:', paciente.medico_assistente_especialidade);
+      }
       return result.length > 0 ? result[0] : null;
     } catch (error) {
       console.error('Erro ao buscar paciente por ID:', error);
@@ -266,9 +277,14 @@ export class PacienteModel {
     const baseSelectQuery = `
       SELECT 
         p.*,
-        o.nome as operadora_nome
+        o.nome as operadora_nome,
+        rt.nome as medico_assistente_nome,
+        rt.email as medico_assistente_email,
+        rt.telefone as medico_assistente_telefone,
+        rt.especialidade as medico_assistente_especialidade
       FROM pacientes p
       LEFT JOIN operadoras o ON p.operadora_id = o.id
+      LEFT JOIN responsaveis_tecnicos rt ON p.prestador_id = rt.id
       ${whereClause}
       ORDER BY p.created_at DESC
     `;
@@ -290,6 +306,19 @@ export class PacienteModel {
       
       const total = countResult[0]?.total || 0;
       const totalPages = Math.ceil(total / limit);
+      
+      // Debug: Log dos campos do médico assistente
+      if (patients && patients.length > 0) {
+        console.log('🔧 Debug findByClinicaId - Primeiro paciente:');
+        const firstPatient = patients[0];
+        console.log('  ID:', firstPatient.id);
+        console.log('  Nome:', firstPatient.nome);
+        console.log('  Prestador ID:', firstPatient.prestador_id);
+        console.log('  Médico Assistente Nome:', firstPatient.medico_assistente_nome);
+        console.log('  Médico Assistente Email:', firstPatient.medico_assistente_email);
+        console.log('  Médico Assistente Telefone:', firstPatient.medico_assistente_telefone);
+        console.log('  Médico Assistente Especialidade:', firstPatient.medico_assistente_especialidade);
+      }
       
       return {
         data: patients,
@@ -345,6 +374,13 @@ export class PacienteModel {
         const parsed = parseInt(pacienteData.Operadora as any, 10);
         operadoraId = Number.isFinite(parsed) ? parsed : null;
       }
+    }
+    
+    // Processar prestador_id
+    let prestadorId: number | null = null;
+    if (pacienteData.Prestador !== undefined && pacienteData.Prestador !== null) {
+      prestadorId = await resolveIdByName('Prestadores', pacienteData.Prestador, 1);
+      console.log('🔧 prestador_id resolvido:', prestadorId);
     }
     
     // Converter e validar datas
@@ -407,7 +443,7 @@ export class PacienteModel {
     })();
 
     const insertColumns = [
-      'clinica_id', 'operadora_id', 'codigo', 'nome',
+      'clinica_id', 'operadora_id', 'prestador_id', 'codigo', 'nome',
       'cpf', 'rg', 'data_nascimento', 'sexo', 'cid_diagnostico', 'data_primeira_solicitacao',
       'stage', 'treatment', 'peso', 'altura', 'status', 'contatos', 'endereco',
       'plano_saude', 'abrangencia', 'numero_carteirinha', 'contato_emergencia', 'observacoes'
@@ -422,12 +458,15 @@ export class PacienteModel {
     console.log('🔧 ===== DEBUG CRIAÇÃO PACIENTE =====');
     console.log('🔧 clinica_id:', pacienteData.clinica_id);
     console.log('🔧 operadora_id (resolvido):', operadoraId);
+    console.log('🔧 prestador_id (resolvido):', prestadorId);
     console.log('🔧 Operadora original (frontend):', pacienteData.Operadora);
+    console.log('🔧 Prestador original (frontend):', pacienteData.Prestador);
     console.log('🔧 =====================================');
     
     const values = [
         pacienteData.clinica_id || 1,
         operadoraId,
+        prestadorId,
         codigoValue,
         pacienteData.Paciente_Nome,
         (pacienteData.cpf || '').replace(/\D/g, '') || null,
@@ -488,40 +527,112 @@ export class PacienteModel {
   
   // Atualizar paciente
   static async update(id: number, pacienteData: PacienteUpdateInput): Promise<Paciente | null> {
+    // Mapeamento de campos do frontend (maiúsculas) para banco (minúsculas)
+    const fieldMapping: Record<string, string> = {
+      'Paciente_Nome': 'nome',
+      'Codigo': 'codigo',
+      'Data_Nascimento': 'data_nascimento',
+      'Sexo': 'sexo',
+      'Cid_Diagnostico': 'cid_diagnostico',
+      'Data_Primeira_Solicitacao': 'data_primeira_solicitacao',
+      'Data_Inicio_Tratamento': 'data_primeira_solicitacao',
+      'Operadora': 'operadora_id',
+      'Prestador': 'prestador_id'
+    };
+    
+    // Campos que devem ser agrupados em JSON
+    const jsonFields = {
+      contatos: ['telefone', 'email', 'contato_telefone', 'contato_celular', 'contato_email'],
+      endereco: ['endereco_rua', 'endereco_numero', 'endereco_bairro', 'endereco_cidade', 'endereco_estado', 'endereco_cep', 'endereco'],
+      contato_emergencia: ['contato_emergencia_nome', 'contato_emergencia_telefone']
+    };
+    
     // Pré-processar dados (normalizações, resoluções e conversões)
-    const dataToUpdate: any = { ...pacienteData };
+    const dataToUpdate: any = {};
+    const jsonData: any = {
+      contatos: {},
+      endereco: {},
+      contato_emergencia: {}
+    };
 
-    if (dataToUpdate.Data_Inicio_Tratamento && !dataToUpdate.Data_Primeira_Solicitacao) {
-      const conv = convertDateToMySQL(dataToUpdate.Data_Inicio_Tratamento);
-      if (conv) dataToUpdate.Data_Primeira_Solicitacao = conv;
-      delete dataToUpdate.Data_Inicio_Tratamento;
+    // Aplicar mapeamento e normalizações
+    for (const [key, value] of Object.entries(pacienteData)) {
+      if (value === undefined || value === null || value === '') continue;
+      
+      // Verificar se é um campo JSON
+      let isJsonField = false;
+      for (const [jsonKey, fields] of Object.entries(jsonFields)) {
+        if (fields.includes(key)) {
+          isJsonField = true;
+          
+          // Processar campos de contatos
+          if (jsonKey === 'contatos') {
+            if (key === 'telefone' || key === 'contato_telefone') jsonData.contatos.telefone = value;
+            else if (key === 'email' || key === 'contato_email') jsonData.contatos.email = value;
+            else if (key === 'contato_celular') jsonData.contatos.celular = value;
+          }
+          // Processar campos de endereço
+          else if (jsonKey === 'endereco') {
+            if (typeof value === 'object' && !Array.isArray(value)) {
+              // Se já é um objeto, usar diretamente
+              jsonData.endereco = { ...jsonData.endereco, ...value };
+            } else if (key === 'endereco_rua') jsonData.endereco.rua = value;
+            else if (key === 'endereco_numero') jsonData.endereco.numero = value;
+            else if (key === 'endereco_bairro') jsonData.endereco.bairro = value;
+            else if (key === 'endereco_cidade') jsonData.endereco.cidade = value;
+            else if (key === 'endereco_estado') jsonData.endereco.estado = value;
+            else if (key === 'endereco_cep') jsonData.endereco.cep = normalizeCep(value as string);
+          }
+          // Processar campos de contato de emergência
+          else if (jsonKey === 'contato_emergencia') {
+            if (typeof value === 'object' && !Array.isArray(value)) {
+              jsonData.contato_emergencia = { ...jsonData.contato_emergencia, ...value };
+            } else if (key === 'contato_emergencia_nome') jsonData.contato_emergencia.nome = value;
+            else if (key === 'contato_emergencia_telefone') jsonData.contato_emergencia.telefone = value;
+          }
+          break;
+        }
+      }
+      
+      // Se não é campo JSON, processar normalmente
+      if (!isJsonField) {
+        const dbField = fieldMapping[key] || key;
+        
+        if (key === 'Data_Inicio_Tratamento' || key === 'Data_Primeira_Solicitacao') {
+          const conv = convertDateToMySQL(value as string);
+          if (conv) dataToUpdate['data_primeira_solicitacao'] = conv;
+        } else if (key === 'Data_Nascimento') {
+          const conv = convertDateToMySQL(value as string);
+          if (conv) dataToUpdate['data_nascimento'] = conv;
+        } else if (key === 'Sexo') {
+          const sx = normalizeSexo(value as string);
+          if (sx) dataToUpdate['sexo'] = sx;
+        } else if (key === 'status') {
+          const st = normalizeStatus(value as string);
+          if (st) dataToUpdate['status'] = st;
+        } else if (key === 'Operadora') {
+          const operadoraId = await resolveIdByName('Operadoras', value as string | number, 1);
+          dataToUpdate['operadora_id'] = operadoraId;
+        } else if (key === 'Prestador') {
+          const prestadorId = await resolveIdByName('Prestadores', value as string | number, 1);
+          dataToUpdate['prestador_id'] = prestadorId;
+        } else if (key === 'Cid_Diagnostico') {
+          dataToUpdate['cid_diagnostico'] = Array.isArray(value) ? value.join(', ') : value;
+        } else {
+          dataToUpdate[dbField] = value;
+        }
+      }
     }
 
-    if (dataToUpdate.Data_Nascimento) {
-      const conv = convertDateToMySQL(dataToUpdate.Data_Nascimento);
-      if (conv) dataToUpdate.Data_Nascimento = conv;
+    // Adicionar campos JSON se tiverem dados
+    if (Object.keys(jsonData.contatos).length > 0) {
+      dataToUpdate.contatos = JSON.stringify(jsonData.contatos);
     }
-
-    if (dataToUpdate.endereco_cep) {
-      dataToUpdate.endereco_cep = normalizeCep(dataToUpdate.endereco_cep);
+    if (Object.keys(jsonData.endereco).length > 0) {
+      dataToUpdate.endereco = JSON.stringify(jsonData.endereco);
     }
-
-    if (dataToUpdate.Sexo) {
-      const sx = normalizeSexo(dataToUpdate.Sexo);
-      if (sx) dataToUpdate.Sexo = sx;
-    }
-
-    if (dataToUpdate.status) {
-      const st = normalizeStatus(dataToUpdate.status);
-      if (st) dataToUpdate.status = st;
-    }
-
-    if (dataToUpdate.Operadora !== undefined) {
-      dataToUpdate.Operadora = await resolveIdByName('Operadoras', dataToUpdate.Operadora, 1);
-    }
-
-    if (dataToUpdate.Prestador !== undefined) {
-      dataToUpdate.Prestador = await resolveIdByName('Prestadores', dataToUpdate.Prestador, 1);
+    if (Object.keys(jsonData.contato_emergencia).length > 0) {
+      dataToUpdate.contato_emergencia = JSON.stringify(jsonData.contato_emergencia);
     }
 
     // Construir query dinâmica baseada nos campos fornecidos
@@ -540,12 +651,16 @@ export class PacienteModel {
     }
     
     const updateQuery = `
-      UPDATE Pacientes_Clinica 
+      UPDATE pacientes 
       SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `;
     
     values.push(id);
+    
+    console.log('🔧 Debug UPDATE query:');
+    console.log('Query:', updateQuery);
+    console.log('Values:', values);
     
     try {
       const result = await query(updateQuery, values);
@@ -671,7 +786,7 @@ export class PacienteModel {
   // Contar pacientes
   static async count(where?: any): Promise<number> {
     try {
-      let queryStr = 'SELECT COUNT(*) as count FROM Pacientes_Clinica';
+      let queryStr = 'SELECT COUNT(*) as count FROM pacientes';
       const params: any[] = [];
 
       if (where) {
