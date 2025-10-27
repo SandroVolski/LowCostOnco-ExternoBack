@@ -1,0 +1,34 @@
+// src/routes/operadoraRoutes.ts
+
+import { Router } from 'express';
+import { OperadoraController } from '../controllers/operadoraController';
+import { authenticateToken } from '../middleware/auth';
+import { requireRole } from '../middleware/auth';
+
+const router = Router();
+
+// 🆕 ROTAS ADMINISTRATIVAS PARA CRUD COMPLETO
+// Listar todas as operadoras (para administradores)
+router.get('/admin', authenticateToken, requireRole(['admin']), OperadoraController.getAllOperadoras);           // GET /api/operadoras/admin
+// Buscar operadora por ID (para administradores)
+router.get('/admin/:id', authenticateToken, requireRole(['admin']), OperadoraController.getOperadoraById);       // GET /api/operadoras/admin/:id
+// Criar nova operadora (para administradores)
+router.post('/admin', authenticateToken, requireRole(['admin']), OperadoraController.createOperadora);           // POST /api/operadoras/admin
+// Atualizar operadora (para administradores)
+router.put('/admin/:id', authenticateToken, requireRole(['admin']), OperadoraController.updateOperadora);        // PUT /api/operadoras/admin/:id
+// Deletar operadora (para administradores)
+router.delete('/admin/:id', authenticateToken, requireRole(['admin']), OperadoraController.deleteOperadora);     // DELETE /api/operadoras/admin/:id
+
+// 🆕 ENDPOINTS PÚBLICOS PARA CLÍNICA
+// Listar operadoras para clínicas
+router.get('/', authenticateToken, OperadoraController.getOperadorasForClinica);
+
+// Buscar operadora de uma clínica específica
+router.get('/clinica/:clinicaId', authenticateToken, OperadoraController.getOperadoraByClinica);
+
+// Endpoint placeholder (mantido para compatibilidade)
+router.get('/credenciadas', authenticateToken, (req, res) => {
+  res.json({ success: true, message: 'OK', data: [] });
+});
+
+export default router;
