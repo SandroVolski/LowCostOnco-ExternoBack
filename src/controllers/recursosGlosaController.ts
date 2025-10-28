@@ -91,17 +91,56 @@ class RecursosGlosaController {
         });
       }
 
+      // Buscar operadora_registro_ans do lote
+      const [lotes] = await connection.execute<RowDataPacket[]>(
+        'SELECT operadora_registro_ans FROM financeiro_lotes WHERE id = ?',
+        [lote_id]
+      );
+
+      if (!lotes || lotes.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Lote não encontrado'
+        });
+      }
+
+      const operadora_registro_ans = lotes[0].operadora_registro_ans;
+
+      if (!operadora_registro_ans) {
+        return res.status(400).json({
+          success: false,
+          message: 'Lote não possui operadora associada'
+        });
+      }
+
+      // Buscar valor_guia da guia
+      const [guias] = await connection.execute<RowDataPacket[]>(
+        'SELECT valor_total FROM financeiro_items WHERE id = ?',
+        [guia_id]
+      );
+
+      if (!guias || guias.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Guia não encontrada'
+        });
+      }
+
+      const valor_guia = guias[0].valor_total || 0;
+
       // 1. Inserir recurso de glosa
       const [resultRecurso] = await connection.execute<ResultSetHeader>(
         `INSERT INTO recursos_glosas
-         (guia_id, lote_id, clinica_id, justificativa, motivos_glosa, status_recurso, created_at)
-         VALUES (?, ?, ?, ?, ?, 'pendente', NOW())`,
+         (guia_id, lote_id, clinica_id, operadora_registro_ans, justificativa, motivos_glosa, valor_guia, status_recurso, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'pendente', NOW())`,
         [
           guia_id,
           lote_id,
           clinica_id,
+          operadora_registro_ans,
           justificativa,
-          motivos_glosa ? JSON.stringify(JSON.parse(motivos_glosa)) : null
+          motivos_glosa ? JSON.stringify(JSON.parse(motivos_glosa)) : null,
+          valor_guia
         ]
       );
 
@@ -110,8 +149,8 @@ class RecursosGlosaController {
       // 2. Inserir histórico inicial
       await connection.execute(
         `INSERT INTO recursos_glosas_historico
-         (recurso_id, status, observacao, created_at)
-         VALUES (?, 'pendente', 'Recurso de glosa criado e aguardando análise da operadora', NOW())`,
+         (recurso_glosa_id, acao, status_novo, realizado_por, descricao, created_at)
+         VALUES (?, 'recurso_criado', 'pendente', 'clinica', 'Recurso de glosa criado e aguardando análise da operadora', NOW())`,
         [recursoId]
       );
 
@@ -150,9 +189,9 @@ class RecursosGlosaController {
       ) as any;
 
       const [historico] = await connection.execute(
-        `SELECT status, created_at as data, observacao
+        `SELECT acao, status_novo as status, created_at as data, descricao, realizado_por
          FROM recursos_glosas_historico
-         WHERE recurso_id = ?
+         WHERE recurso_glosa_id = ?
          ORDER BY created_at ASC`,
         [recursoId]
       ) as any;
@@ -250,9 +289,9 @@ class RecursosGlosaController {
 
       // Buscar histórico
       const [historico] = await pool.execute<RowDataPacket[]>(
-        `SELECT status, observacao, created_at AS data
+        `SELECT acao, status_novo as status, created_at AS data, descricao, realizado_por
          FROM recursos_glosas_historico
-         WHERE recurso_id = ?
+         WHERE recurso_glosa_id = ?
          ORDER BY created_at ASC`,
         [recurso.id]
       );
@@ -307,9 +346,9 @@ class RecursosGlosaController {
 
       // Buscar histórico
       const [historico] = await pool.execute<RowDataPacket[]>(
-        `SELECT status, observacao, created_at AS data
+        `SELECT acao, status_novo as status, created_at AS data, descricao, realizado_por
          FROM recursos_glosas_historico
-         WHERE recurso_id = ?
+         WHERE recurso_glosa_id = ?
          ORDER BY created_at ASC`,
         [recurso.id]
       );
@@ -359,12 +398,19 @@ class RecursosGlosaController {
         [status, id]
       );
 
+      // Buscar status anterior
+      const [recursoAtual] = await connection.execute<RowDataPacket[]>(
+        `SELECT status_recurso FROM recursos_glosas WHERE id = ?`,
+        [id]
+      );
+      const statusAnterior = recursoAtual.length > 0 ? recursoAtual[0].status_recurso : null;
+
       // Inserir no histórico
       await connection.execute(
         `INSERT INTO recursos_glosas_historico
-         (recurso_id, status, observacao, created_at)
-         VALUES (?, ?, ?, NOW())`,
-        [id, status, observacao || `Status alterado para ${status}`]
+         (recurso_glosa_id, acao, status_anterior, status_novo, realizado_por, descricao, created_at)
+         VALUES (?, 'status_alterado', ?, ?, 'operadora', ?, NOW())`,
+        [id, statusAnterior, status, observacao || `Status alterado para ${status}`]
       );
 
       // Se deferido, atualizar status da guia para pago

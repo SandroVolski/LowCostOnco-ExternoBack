@@ -32,6 +32,10 @@ import chatRoutes from './routes/chatRoutes';
 import procedimentoRoutes from './routes/procedimentoRoutes';
 import financeiroRoutes from './routes/financeiroRoutes';
 import recursosGlosaRoutes from './routes/recursosGlosaRoutes';
+import auditorRoutes from './routes/auditorRoutes';
+import operadoraRecursosRoutes from './routes/operadoraRecursosRoutes';
+import adminAuditoresRoutes from './routes/adminAuditoresRoutes';
+import { authenticateAdmin } from './middleware/authAdmin';
 
 // Carregar variáveis de ambiente
 dotenv.config();
@@ -199,6 +203,15 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/financeiro', authenticateToken, financeiroRoutes);
 app.use('/api/financeiro', authenticateToken, recursosGlosaRoutes);
 app.use('/api/procedimentos', authenticateToken, cacheMiddleware(), procedimentoRoutes);
+
+// Rotas de Auditores
+app.use('/api/auditor', auditorRoutes);
+
+// Rotas de Operadora para Recursos de Glosas
+app.use('/api/operadora/recursos-glosas', operadoraRecursosRoutes);
+
+// Rotas Admin para gerenciar Auditores
+app.use('/api/admin/auditores', authenticateAdmin, adminAuditoresRoutes);
 
 // 🆕 Compatibilidade com frontend: lista de especialidades (placeholder)
 app.get('/api/especialidades', authenticateToken, (req, res) => {

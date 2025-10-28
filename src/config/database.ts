@@ -13,19 +13,25 @@ export const dbConfig = {
   
   // Configurações do pool otimizadas para estabilidade
   waitForConnections: true,
-  connectionLimit: 5, // Reduzido ainda mais para evitar sobrecarga
+  connectionLimit: 20, // Aumentado para suportar mais requisições simultâneas
   queueLimit: 0, // Desabilitar fila para evitar acúmulo
   
   // Configurações de keep-alive para evitar ECONNRESET
-  keepAliveInitialDelay: 0,
+  keepAliveInitialDelay: 10000, // 10 segundos
   enableKeepAlive: true,
-  
+
   // Timeouts para evitar conexões travadas
   acquireTimeout: 30000, // 30 segundos
-  timeout: 30000, // 30 segundos
-  
-  // Configurações de reconexão
+  timeout: 60000, // 60 segundos para queries mais lentas
+  connectTimeout: 10000, // 10 segundos para conectar
+
+  // Configurações de reconexão automática
   reconnect: true,
+
+  // Configurações MySQL para evitar ECONNRESET
+  waitTimeout: 28800, // 8 horas (padrão MySQL)
+  maxIdle: 10, // Máximo de conexões ociosas
+  idleTimeout: 60000, // 60 segundos antes de fechar conexão ociosa
   
   // Configurações de performance
   multipleStatements: false, // Desabilitar múltiplas statements por segurança
@@ -46,7 +52,7 @@ export const logsDbConfig = {
   database: 'bd_onkhos_logs', // Banco específico para logs
   port: parseInt(process.env.DB_PORT || '3306'),
   waitForConnections: true,
-  connectionLimit: 5, // Pool menor para logs
+  connectionLimit: 10, // Pool menor para logs
   queueLimit: 0,
   acquireTimeout: 60000,
   timeout: 60000,
@@ -176,6 +182,29 @@ pool.on('enqueue', () => {
 
 // Limpeza periódica de conexões órfãs a cada 5 minutos
 setInterval(cleanupOrphanedConnections, 5 * 60 * 1000);
+
+// Heartbeat para manter conexões vivas (prevenir ECONNRESET)
+const heartbeat = async () => {
+  try {
+    const connection = await pool.getConnection();
+    await connection.query('SELECT 1 as heartbeat');
+    connection.release();
+    console.log('💓 Heartbeat do pool MySQL OK');
+  } catch (error) {
+    console.warn('💔 Heartbeat do pool falhou:', (error as any)?.message);
+    // Tentar recriar o pool
+    try {
+      await pool.end();
+      Object.assign(pool, mysql.createPool(dbConfig));
+      console.log('🔄 Pool recriado após falha no heartbeat');
+    } catch (recreateError) {
+      console.error('❌ Erro ao recriar pool:', (recreateError as any)?.message);
+    }
+  }
+};
+
+// Executar heartbeat a cada 30 segundos
+setInterval(heartbeat, 30 * 1000);
 
 // Função para testar a conexão com timeout
 export const testConnection = async (): Promise<boolean> => {

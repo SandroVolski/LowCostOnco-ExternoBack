@@ -23,11 +23,13 @@
   "author": "Onkhos",
   "license": "MIT",
   "dependencies": {
+    "@types/bcrypt": "^6.0.0",
     "@types/multer": "^2.0.0",
     "@types/nodemailer": "^7.0.1",
     "@types/socket.io": "^3.0.1",
     "@types/xml2js": "^0.4.14",
     "axios": "^1.11.0",
+    "bcrypt": "^6.0.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
