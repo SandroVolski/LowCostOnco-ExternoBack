@@ -46,7 +46,7 @@ const PORT = process.env.PORT || 3001;
 
 const corsOrigins = process.env.CORS_ORIGIN 
   ? process.env.CORS_ORIGIN.split(',')
-  : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:8080', 'http://localhost:5050'];
+  : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:8080', 'http://localhost:5050', 'https://app.onkhos.com', 'https://apisistema.onkhos.com'];
 
 const corsConfig = {
   origin: corsOrigins,
