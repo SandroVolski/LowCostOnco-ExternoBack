@@ -151,7 +151,7 @@ export class PacienteModel {
     let searchParams: any[] = [];
     
     if (search && search.trim() !== '') {
-      whereClause = `WHERE p.Paciente_Nome LIKE ? OR p.Codigo LIKE ? OR p.cpf LIKE ?`;
+      whereClause = `WHERE p.nome LIKE ? OR p.numero_carteirinha LIKE ? OR p.cpf LIKE ?`;
       const searchTerm = `%${search.trim()}%`;
       searchParams = [searchTerm, searchTerm, searchTerm];
     }
@@ -268,7 +268,7 @@ export class PacienteModel {
     let searchParams: any[] = [clinicaId];
     
     if (search && search.trim() !== '') {
-      whereClause += ` AND (p.nome LIKE ? OR p.codigo LIKE ? OR p.cpf LIKE ?)`;
+      whereClause += ` AND (p.nome LIKE ? OR p.numero_carteirinha LIKE ? OR p.cpf LIKE ?)`;
       const searchTerm = `%${search.trim()}%`;
       searchParams.push(searchTerm, searchTerm, searchTerm);
     }
@@ -404,10 +404,6 @@ export class PacienteModel {
 
     // Normalizações opcionais
     const cep = normalizeCep(pacienteData.endereco_cep);
-
-    const codigoValue = typeof pacienteData.Codigo === 'string' && pacienteData.Codigo.trim() === ''
-      ? null
-      : (pacienteData.Codigo !== undefined ? pacienteData.Codigo : null);
     
     logDev('🔧 Datas convertidas:', {
         dataNascimento,
@@ -443,7 +439,7 @@ export class PacienteModel {
     })();
 
     const insertColumns = [
-      'clinica_id', 'operadora_id', 'prestador_id', 'codigo', 'nome',
+      'clinica_id', 'operadora_id', 'prestador_id', 'nome',
       'cpf', 'rg', 'data_nascimento', 'sexo', 'cid_diagnostico', 'data_primeira_solicitacao',
       'stage', 'treatment', 'peso', 'altura', 'status', 'contatos', 'endereco',
       'plano_saude', 'abrangencia', 'numero_carteirinha', 'contato_emergencia', 'observacoes'
@@ -467,7 +463,6 @@ export class PacienteModel {
         pacienteData.clinica_id || 1,
         operadoraId,
         prestadorId,
-        codigoValue,
         pacienteData.Paciente_Nome,
         (pacienteData.cpf || '').replace(/\D/g, '') || null,
         pacienteData.rg || null,
@@ -530,7 +525,6 @@ export class PacienteModel {
     // Mapeamento de campos do frontend (maiúsculas) para banco (minúsculas)
     const fieldMapping: Record<string, string> = {
       'Paciente_Nome': 'nome',
-      'Codigo': 'codigo',
       'Data_Nascimento': 'data_nascimento',
       'Sexo': 'sexo',
       'Cid_Diagnostico': 'cid_diagnostico',
@@ -690,24 +684,6 @@ export class PacienteModel {
     }
   }
   
-  // Verificar se código já existe (novo schema)
-  static async checkCodigoExists(codigo: string, excludeId?: number): Promise<boolean> {
-    let checkQuery = `SELECT id FROM pacientes WHERE codigo = ?`;
-    let params: any[] = [codigo];
-    
-    if (excludeId) {
-      checkQuery += ` AND id != ?`;
-      params.push(excludeId);
-    }
-    
-    try {
-      const result = await query(checkQuery, params);
-      return result.length > 0;
-    } catch (error) {
-      console.error('Erro ao verificar código:', error);
-      throw new Error('Erro ao verificar código');
-    }
-  }
   
   // Verificar se CPF já existe (novo schema) – normaliza máscara e consulta tabela correta
   static async checkCpfExists(cpf: string, excludeId?: number): Promise<boolean> {
@@ -738,7 +714,7 @@ export class PacienteModel {
     const searchParams: any[] = [operadoraId];
 
     if (search && search.trim() !== '') {
-      whereClause += ` AND (p.nome LIKE ? OR p.codigo LIKE ? OR p.cpf LIKE ?)`;
+      whereClause += ` AND (p.nome LIKE ? OR p.numero_carteirinha LIKE ? OR p.cpf LIKE ?)`;
       const searchTerm = `%${search.trim()}%`;
       searchParams.push(searchTerm, searchTerm, searchTerm);
     }

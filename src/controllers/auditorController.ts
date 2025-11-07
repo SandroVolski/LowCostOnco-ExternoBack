@@ -3,6 +3,7 @@ import pool from '../config/database';
 import { ResultSetHeader, RowDataPacket } from 'mysql2';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import { FinanceiroCompactModel } from '../models/FinanceiroCompact';
 
 class AuditorController {
   // Autenticação de auditor
@@ -397,20 +398,27 @@ class AuditorController {
     try {
       const auditorId = (req as any).auditor?.id;
 
-      // Estatísticas
-      const [stats] = await pool.execute<RowDataPacket[]>(
+      const [statsRows] = await pool.execute<RowDataPacket[]>(
         `SELECT
-          COUNT(*) as total,
-          SUM(CASE WHEN status_recurso = 'em_analise_auditor' THEN 1 ELSE 0 END) as pendentes,
-          SUM(CASE WHEN status_recurso = 'parecer_emitido' THEN 1 ELSE 0 END) as concluidos,
-          AVG(tempo_analise_minutos) as tempo_medio_minutos
+          COUNT(*) AS total,
+          SUM(CASE WHEN status_recurso IN ('pendente', 'em_analise_auditor', 'solicitado_parecer') THEN 1 ELSE 0 END) AS pendentes,
+          SUM(CASE WHEN status_recurso = 'parecer_emitido' THEN 1 ELSE 0 END) AS concluidos,
+          SUM(CASE WHEN status_recurso = 'pendente' THEN 1 ELSE 0 END) AS pendentes_nao_analisados,
+          AVG(rgp.tempo_analise_minutos) AS tempo_medio_minutos
          FROM recursos_glosas rg
          LEFT JOIN recursos_glosas_pareceres rgp ON rg.id = rgp.recurso_glosa_id
          WHERE rg.auditor_id = ?`,
         [auditorId]
       );
 
-      // Recursos recentes
+      const estatisticas = statsRows[0] || {
+        total: 0,
+        pendentes: 0,
+        concluidos: 0,
+        pendentes_nao_analisados: 0,
+        tempo_medio_minutos: 0
+      };
+
       const [recentes] = await pool.execute<RowDataPacket[]>(
         `SELECT * FROM vw_recursos_glosas_completo
          WHERE auditor_id = ?
@@ -422,7 +430,11 @@ class AuditorController {
       return res.json({
         success: true,
         data: {
-          estatisticas: stats[0],
+          total_recursos: Number(estatisticas.total) || 0,
+          aguardando_analise: Number(estatisticas.pendentes) || 0,
+          pareceres_emitidos: Number(estatisticas.concluidos) || 0,
+          media_tempo_analise: Math.round(Number(estatisticas.tempo_medio_minutos) || 0),
+          pendentes_nao_analisados: Number(estatisticas.pendentes_nao_analisados) || 0,
           recursos_recentes: recentes
         }
       });
@@ -432,6 +444,198 @@ class AuditorController {
       return res.status(500).json({
         success: false,
         message: 'Erro ao carregar dashboard'
+      });
+    }
+  }
+
+  // Guia completa para análise do auditor
+  async getGuiaCompleta(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const auditorId = (req as any).auditor?.id;
+
+      if (!auditorId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Auditor não identificado'
+        });
+      }
+
+      const [recursos] = await pool.execute<RowDataPacket[]>(
+        `SELECT rg.*,
+                fl.operadora_nome,
+                fl.operadora_registro_ans,
+                fl.numero_lote,
+                fl.competencia,
+                fl.data_envio,
+                fl.tipo_transacao,
+                fl.sequencial_transacao,
+                fl.data_registro_transacao,
+                fl.hora_registro_transacao,
+                fl.cnpj_prestador,
+                fl.nome_prestador,
+                fl.registro_ans,
+                fl.padrao_tiss,
+                fl.hash_lote,
+                fl.cnes
+         FROM recursos_glosas rg
+         LEFT JOIN financeiro_lotes fl ON fl.id = rg.lote_id
+         WHERE rg.id = ? AND rg.auditor_id = ?`,
+        [id, auditorId]
+      );
+
+      if (recursos.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Recurso não encontrado ou não atribuído a este auditor'
+        });
+      }
+
+      const recurso = recursos[0];
+
+      if (!recurso.lote_id || !recurso.guia_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'Recurso não possui informações completas de lote/guia'
+        });
+      }
+
+      const lote = await FinanceiroCompactModel.getLoteById(recurso.lote_id);
+      const itens = await FinanceiroCompactModel.getAllItemsByLote(recurso.lote_id);
+
+      if (!lote) {
+        return res.status(404).json({
+          success: false,
+          message: 'Lote financeiro não encontrado'
+        });
+      }
+
+      if ((!lote.cnes || lote.cnes === 'N/A') && Array.isArray(itens)) {
+        const guiaComCnes = itens.find((item: any) => item.tipo_item === 'guia' && item.cnes);
+        if (guiaComCnes?.cnes) {
+          (lote as any).cnes = guiaComCnes.cnes;
+        }
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          recurso,
+          lote,
+          itens
+        }
+      });
+
+    } catch (error: any) {
+      console.error('Erro ao buscar guia completa para auditor:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao obter dados completos da guia',
+        error: error.message
+      });
+    }
+  }
+
+  // Listar pacientes atendidos pelo auditor
+  async listarPacientes(req: Request, res: Response) {
+    try {
+      const auditorId = (req as any).auditor?.id;
+      if (!auditorId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Auditor não identificado'
+        });
+      }
+
+      const [pacientes] = await pool.execute<RowDataPacket[]>(
+        `SELECT 
+           numero_carteira,
+           clinica_nome,
+           COUNT(*) AS total_recursos,
+           MAX(created_at) AS ultimo_recurso
+         FROM vw_recursos_glosas_completo
+         WHERE auditor_id = ?
+         GROUP BY numero_carteira, clinica_nome
+         ORDER BY ultimo_recurso DESC
+         LIMIT 200`,
+        [auditorId]
+      );
+
+      return res.json({
+        success: true,
+        data: pacientes
+      });
+
+    } catch (error: any) {
+      console.error('Erro ao listar pacientes do auditor:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao listar pacientes atendidos',
+        error: error.message
+      });
+    }
+  }
+
+  // Buscar histórico de recursos por carteira
+  async buscarHistoricoPorCarteira(req: Request, res: Response) {
+    try {
+      const { carteira } = req.query;
+
+      if (!carteira || typeof carteira !== 'string') {
+        return res.status(400).json({
+          success: false,
+          message: 'Número da carteira é obrigatório'
+        });
+      }
+
+      // Buscar recursos por carteira usando a view completa
+      const [recursos] = await pool.execute<RowDataPacket[]>(
+        `SELECT * FROM vw_recursos_glosas_completo
+         WHERE numero_carteira LIKE ?
+         ORDER BY created_at DESC
+         LIMIT 200`,
+        [`%${carteira}%`]
+      );
+
+      // Para cada recurso, buscar parecer anterior
+      const recursosComPareceres = await Promise.all(
+        recursos.map(async (recurso) => {
+          const [pareceres] = await pool.execute<RowDataPacket[]>(
+            `SELECT rgp.*, a.nome as auditor_nome
+             FROM recursos_glosas_pareceres rgp
+             LEFT JOIN auditores a ON rgp.auditor_id = a.id
+             WHERE rgp.recurso_glosa_id = ?
+             ORDER BY rgp.created_at DESC
+             LIMIT 1`,
+            [recurso.id]
+          );
+
+          const parecer = pareceres[0] || null;
+          
+          return {
+            ...recurso,
+            parecer: parecer ? {
+              parecer_tecnico: parecer.parecer_tecnico,
+              recomendacao: parecer.recomendacao,
+              valor_recomendado: parecer.valor_recomendado,
+              justificativa_tecnica: parecer.justificativa_tecnica,
+              data_emissao: parecer.data_emissao || parecer.created_at
+            } : null
+          };
+        })
+      );
+
+      return res.json({
+        success: true,
+        data: recursosComPareceres
+      });
+
+    } catch (error) {
+      console.error('Erro ao buscar histórico por carteira:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao buscar histórico do paciente',
+        error: (error as any).message
       });
     }
   }

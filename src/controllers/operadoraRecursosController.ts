@@ -435,6 +435,56 @@ class OperadoraRecursosController {
     }
   }
 
+  // Chat: Listar mensagens
+  async listarMensagens(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+
+      // Verificar se o recurso pertence à operadora
+      const [recursos] = await pool.execute<RowDataPacket[]>(
+        `SELECT r.id FROM recursos_glosas r
+         INNER JOIN financeiro_lotes l ON r.lote_id = l.id
+         WHERE r.id = ? AND l.operadora_registro_ans = ?`,
+        [id, (req as any).operadora?.registro_ans]
+      );
+
+      if (recursos.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Recurso não encontrado'
+        });
+      }
+
+      // Buscar mensagens
+      const [mensagens] = await pool.execute<RowDataPacket[]>(
+        `SELECT * FROM recursos_glosas_chat
+         WHERE recurso_glosa_id = ?
+         ORDER BY created_at ASC`,
+        [id]
+      );
+
+      // Marcar mensagens do auditor como lidas
+      await pool.execute(
+        `UPDATE recursos_glosas_chat
+         SET lida = TRUE, data_leitura = NOW()
+         WHERE recurso_glosa_id = ? AND tipo_remetente = 'auditor' AND lida = FALSE`,
+        [id]
+      );
+
+      return res.json({
+        success: true,
+        data: mensagens
+      });
+
+    } catch (error) {
+      console.error('Erro ao listar mensagens:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao listar mensagens'
+      });
+    }
+  }
+
   // Chat: Enviar mensagem para auditor
   async enviarMensagem(req: Request, res: Response) {
     try {

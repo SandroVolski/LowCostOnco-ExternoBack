@@ -6,7 +6,6 @@ export interface Paciente {
   Paciente_Nome: string;
   Operadora: number;
   Prestador: number;
-  Codigo?: string;
   Data_Nascimento: string; // YYYY-MM-DD format
   Sexo: 'Masculino' | 'Feminino';
   Cid_Diagnostico: string;
@@ -50,7 +49,6 @@ export interface PacienteCreateInput {
   Paciente_Nome: string;
   Operadora: number | string;
   Prestador: number | string;
-  Codigo?: string;
   Data_Nascimento: string;
   Sexo: 'Masculino' | 'Feminino';
   Cid_Diagnostico: string;
@@ -89,7 +87,6 @@ export interface PacienteUpdateInput {
   Paciente_Nome?: string;
   Operadora?: number | string;
   Prestador?: number | string;
-  Codigo?: string;
   Data_Nascimento?: string;
   Sexo?: 'Masculino' | 'Feminino';
   Cid_Diagnostico?: string;

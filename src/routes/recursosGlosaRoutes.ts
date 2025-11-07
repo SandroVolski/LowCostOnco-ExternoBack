@@ -22,7 +22,15 @@ router.get(
   recursosGlosaController.buscarPorGuia
 );
 
+// Download/visualizar documento anexado
+// IMPORTANTE: Esta rota deve vir ANTES de /recursos-glosas/:id para evitar conflito
+router.get(
+  '/recursos-glosas/documentos/:documentoId',
+  recursosGlosaController.downloadDocumento
+);
+
 // Buscar recurso por ID
+// IMPORTANTE: Esta rota genérica deve vir DEPOIS das rotas mais específicas
 router.get(
   '/recursos-glosas/:id',
   recursosGlosaController.buscarPorId

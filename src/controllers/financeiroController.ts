@@ -4,6 +4,8 @@ import { TISSParser } from '../utils/tissParser';
 import fs from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
+import { pool } from '../config/database';
+import { RowDataPacket } from 'mysql2/promise';
 
 export class FinanceiroController {
   /**
@@ -22,8 +24,10 @@ export class FinanceiroController {
         return;
       }
 
-      const { clinica_id } = req.body;
+      const { clinica_id, operadora_id, competencia: competenciaFornecida } = req.body;
       console.log('🏥 Clinica ID recebido:', clinica_id, 'Tipo:', typeof clinica_id);
+      console.log('🏢 Operadora ID recebido:', operadora_id, 'Tipo:', typeof operadora_id);
+      console.log('📅 Competência fornecida:', competenciaFornecida);
 
       if (!clinica_id) {
         console.log('❌ Erro: ID da clínica não fornecido');
@@ -36,12 +40,42 @@ export class FinanceiroController {
 
       // Parse do XML TISS
       const parsedData = await TISSParser.parseXML(xmlContent);
+      
+      // Buscar operadora automaticamente pelo registroANS se operadora_id não foi fornecido
+      let operadoraIdFinal = operadora_id ? parseInt(operadora_id) : undefined;
+      
+      if (!operadoraIdFinal) {
+        const registroANS = parsedData.cabecalho.registroANS || parsedData.operadora.registro_ans;
+        console.log('🔍 Operadora ID não fornecido, buscando pelo registroANS:', registroANS);
+        
+        if (registroANS) {
+          const [operadoraRows] = await pool.execute<RowDataPacket[]>(
+            'SELECT id FROM operadoras WHERE registroANS = ? AND status = ?',[registroANS, 'ativo']
+          );
+          
+          if ((operadoraRows as any[]).length > 0) {
+            operadoraIdFinal = (operadoraRows as any[])[0].id;
+            console.log('✅ Operadora encontrada automaticamente pelo registroANS:', operadoraIdFinal);
+          } else {
+            console.log('⚠️ Operadora não encontrada pelo registroANS:', registroANS);
+            console.log('📋 Continuando processamento sem operadora_id (usando dados do XML)');
+          }
+        } else {
+          console.log('⚠️ RegistroANS não encontrado no XML');
+        }
+      }
 
       // Calcular hash do XML
       const hash = crypto.createHash('md5').update(xmlContent).digest('hex');
 
-      // Extrair competência
-      const competencia = TISSParser.extractCompetencia(parsedData.cabecalho.dataRegistroTransacao);
+      // Usar competência fornecida pelo usuário ou extrair do XML
+      let competencia = competenciaFornecida;
+      if (!competencia || competencia.trim() === '') {
+        competencia = TISSParser.extractCompetencia(parsedData.cabecalho.dataRegistroTransacao);
+        console.log('📅 Competência extraída do XML:', competencia);
+      } else {
+        console.log('📅 Usando competência fornecida pelo usuário:', competencia);
+      }
 
       // Calcular valor total do lote
       const valorTotal = parsedData.guias.reduce(
@@ -52,6 +86,18 @@ export class FinanceiroController {
       // ==================== USAR MÉTODO COMPACTO ====================
       // Preparar dados para o processamento - USANDO DADOS REAIS DO PARSER
       const xmlDataForProcessing = {
+        cabecalho: {
+          tipoTransacao: parsedData.cabecalho.tipoTransacao || '',
+          sequencialTransacao: parsedData.cabecalho.sequencialTransacao || '',
+          dataRegistroTransacao: parsedData.cabecalho.dataRegistroTransacao || '',
+          horaRegistroTransacao: parsedData.cabecalho.horaRegistroTransacao || '',
+          cnpjPrestador: parsedData.cabecalho.cnpjPrestador || '',
+          nomePrestador: parsedData.cabecalho.nomePrestador || '',
+          registroANS: parsedData.cabecalho.registroANS || '',
+          padrao: parsedData.cabecalho.padrao || '',
+          hash: parsedData.cabecalho.hash || hash,
+          cnes: parsedData.cabecalho.cnes || ''
+        },
         operadora: {
           registro_ans: parsedData.operadora.registro_ans || parsedData.cabecalho.registroANS,
           nome: parsedData.operadora.nome || ''
@@ -98,7 +144,7 @@ export class FinanceiroController {
       };
 
       console.log('🔧 Chamando processarXMLTISS...');
-      const loteId = await FinanceiroCompactModel.processarXMLTISS(xmlDataForProcessing, parseInt(clinica_id));
+      const loteId = await FinanceiroCompactModel.processarXMLTISS(xmlDataForProcessing, parseInt(clinica_id), operadoraIdFinal);
       console.log('✅ Lote processado com ID:', loteId);
 
       res.json({
@@ -452,18 +498,17 @@ export class FinanceiroController {
       const { id } = req.params;
       
       // Buscar como item do tipo guia
-      const pool = require('../config/database').pool;
       const [rows] = await pool.execute(
         'SELECT * FROM financeiro_items WHERE id = ? AND tipo_item = "guia"',
         [parseInt(id)]
       );
       
-      if (!rows || rows.length === 0) {
+      if (!rows || (rows as any[]).length === 0) {
         res.status(404).json({ success: false, message: 'Guia não encontrada' });
         return;
       }
 
-      res.json(rows[0]);
+      res.json((rows as any[])[0]);
     } catch (error: any) {
       console.error('Erro ao buscar guia:', error);
       res.status(500).json({ success: false, message: 'Erro ao buscar guia' });

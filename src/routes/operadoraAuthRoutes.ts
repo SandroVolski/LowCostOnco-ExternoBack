@@ -12,6 +12,7 @@ router.post('/login', OperadoraAuthController.login);
 router.post('/refresh', OperadoraAuthController.refresh);
 router.post('/logout', OperadoraAuthController.logout);
 router.get('/me', OperadoraAuthController.me);
+router.get('/operadoras', OperadoraAuthController.listarOperadoras);
 
 // Rotas protegidas (apenas para admin do sistema)
 router.post('/register', authenticateToken, requireRole(['admin']), OperadoraAuthController.register);

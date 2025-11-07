@@ -197,7 +197,7 @@ export class PacienteController {
       // Forçar clinica_id do token
       (pacienteData as any).clinica_id = clinicaId;
       
-      // Validações básicas (Codigo tornou-se opcional)
+      // Validações básicas
       if (!pacienteData.Paciente_Nome || !pacienteData.Data_Nascimento || !pacienteData.Cid_Diagnostico || !pacienteData.Sexo || !pacienteData.stage || !pacienteData.treatment || !pacienteData.status) {
         const response: ApiResponse = {
           success: false,
@@ -205,19 +205,6 @@ export class PacienteController {
         };
         res.status(400).json(response);
         return;
-      }
-      
-      // Verificar se código já existe (apenas se informado)
-      if (pacienteData.Codigo) {
-        const codigoExists = await PacienteModel.checkCodigoExists(pacienteData.Codigo);
-        if (codigoExists) {
-          const response: ApiResponse = {
-            success: false,
-            message: 'Já existe um paciente com este código'
-          };
-          res.status(400).json(response);
-          return;
-        }
       }
       
       // Verificar se CPF já existe (se fornecido)
@@ -290,19 +277,6 @@ export class PacienteController {
         };
         res.status(403).json(response);
         return;
-      }
-      
-      // Verificar se código já existe (se estiver sendo atualizado)
-      if (pacienteData.Codigo) {
-        const codigoExists = await PacienteModel.checkCodigoExists(pacienteData.Codigo, id);
-        if (codigoExists) {
-          const response: ApiResponse = {
-            success: false,
-            message: 'Já existe um paciente com este código'
-          };
-          res.status(400).json(response);
-          return;
-        }
       }
       
       // Verificar se CPF já existe (se estiver sendo atualizado)

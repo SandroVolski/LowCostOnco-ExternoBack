@@ -7,6 +7,33 @@ import { query } from '../config/database';
 import { OperadoraModel } from '../models/Operadora';
 
 export class OperadoraAuthController {
+  // GET /api/operadora-auth/operadoras - Listar operadoras ativas
+  static async listarOperadoras(req: Request, res: Response): Promise<void> {
+    try {
+      console.log('🔧 Listando operadoras ativas');
+      
+      const operadoras = await query(
+        'SELECT id, nome, codigo FROM operadoras WHERE status = ? ORDER BY nome',
+        ['ativo']
+      );
+      
+      console.log(`✅ ${operadoras.length} operadoras encontradas`);
+      
+      res.json({
+        success: true,
+        data: operadoras
+      });
+      
+    } catch (error: any) {
+      console.error('❌ Erro ao listar operadoras:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Erro interno do servidor',
+        error: error.message
+      });
+    }
+  }
+
   // POST /api/operadora-auth/login
   static async login(req: Request, res: Response): Promise<void> {
     try {

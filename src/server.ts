@@ -35,6 +35,7 @@ import recursosGlosaRoutes from './routes/recursosGlosaRoutes';
 import auditorRoutes from './routes/auditorRoutes';
 import operadoraRecursosRoutes from './routes/operadoraRecursosRoutes';
 import adminAuditoresRoutes from './routes/adminAuditoresRoutes';
+import tabelaPrecosRoutes from './routes/tabelaPrecosRoutes';
 import { authenticateAdmin } from './middleware/authAdmin';
 
 // Carregar variáveis de ambiente
@@ -203,6 +204,7 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/financeiro', authenticateToken, financeiroRoutes);
 app.use('/api/financeiro', authenticateToken, recursosGlosaRoutes);
 app.use('/api/procedimentos', authenticateToken, cacheMiddleware(), procedimentoRoutes);
+app.use('/api/tabelas-precos', authenticateToken, cacheMiddleware(), tabelaPrecosRoutes);
 
 // Rotas de Auditores
 app.use('/api/auditor', auditorRoutes);

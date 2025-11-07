@@ -21,6 +21,7 @@ router.post('/recursos/:id/negar', operadoraRecursosController.negarRecurso);
 router.post('/recursos/:id/solicitar-parecer', operadoraRecursosController.solicitarParecer);
 
 // Chat com auditor
+router.get('/recursos/:id/chat', operadoraRecursosController.listarMensagens);
 router.post('/recursos/:id/chat', operadoraRecursosController.enviarMensagem);
 
 // Auditores

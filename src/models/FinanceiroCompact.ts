@@ -18,6 +18,17 @@ export interface LoteFinanceiro extends RowDataPacket {
   arquivo_xml?: string;
   hash_xml?: string;
   versao_tiss?: string;
+  // Campos do cabeçalho TISS
+  tipo_transacao?: string;
+  sequencial_transacao?: string;
+  data_registro_transacao?: Date;
+  hora_registro_transacao?: string;
+  cnpj_prestador?: string;
+  nome_prestador?: string;
+  registro_ans?: string;
+  padrao_tiss?: string;
+  hash_lote?: string;
+  cnes?: string;
   created_at: Date;
   updated_at: Date;
 }
@@ -90,6 +101,8 @@ export interface ItemFinanceiro extends RowDataPacket {
   
   // Hierarquia
   parent_id?: number;
+  // Competência AAAAMM
+  competencia?: string;
   
   created_at: Date;
   updated_at: Date;
@@ -131,6 +144,8 @@ export interface ItemFinanceiroInput {
   valor_pago?: number;
   data_pagamento?: Date;
   parent_id?: number;
+  // Competência AAAAMM
+  competencia?: string;
   // Dados do profissional
   profissional_nome?: string;
   profissional_conselho?: string;
@@ -301,24 +316,48 @@ export class FinanceiroCompactModel {
 
   static async getLotesByClinica(clinicaId: number): Promise<LoteFinanceiro[]> {
     const [rows] = await pool.execute<LoteFinanceiro[]>(
-      'SELECT * FROM financeiro_lotes WHERE clinica_id = ? ORDER BY data_envio DESC',
+      `SELECT 
+        fl.*,
+        op.nome as operadora_nome_real
+       FROM financeiro_lotes fl
+       LEFT JOIN operadoras op ON fl.operadora_registro_ans = op.registroANS
+       WHERE fl.clinica_id = ? 
+       ORDER BY fl.data_envio DESC`,
       [clinicaId]
     );
 
-    // Garantir que valor_total seja número
-    return rows.map(lote => ({
-      ...lote,
-      valor_total: parseFloat(lote.valor_total as any) || 0,
-      quantidade_guias: parseInt(lote.quantidade_guias as any) || 0
-    }));
+    // Garantir que valor_total seja número e substituir nome da operadora
+    return rows.map(lote => {
+      const loteProcessado = lote as any;
+      return {
+        ...loteProcessado,
+        operadora_nome: loteProcessado.operadora_nome_real || loteProcessado.operadora_nome,
+        valor_total: parseFloat(lote.valor_total as any) || 0,
+        quantidade_guias: parseInt(lote.quantidade_guias as any) || 0
+      };
+    });
   }
 
   static async getLoteById(loteId: number): Promise<LoteFinanceiro | null> {
     const [rows] = await pool.execute<LoteFinanceiro[]>(
-      'SELECT * FROM financeiro_lotes WHERE id = ?',
+      `SELECT 
+        fl.*,
+        op.nome as operadora_nome_real
+       FROM financeiro_lotes fl
+       LEFT JOIN operadoras op ON fl.operadora_registro_ans = op.registroANS
+       WHERE fl.id = ?`,
       [loteId]
     );
-    return rows[0] || null;
+    
+    if (!rows[0]) return null;
+    
+    // Substituir operadora_nome pelo nome real da tabela operadoras se existir
+    const lote = rows[0] as any;
+    if (lote.operadora_nome_real) {
+      lote.operadora_nome = lote.operadora_nome_real;
+    }
+    
+    return lote;
   }
 
   // Buscar lote com dados completos para visualização
@@ -427,6 +466,7 @@ export class FinanceiroCompactModel {
       const values = [
         item.lote_id || null,
         item.clinica_id || null,
+        item.competencia || null,
         item.tipo_item || null,
         item.numero_guia_prestador || null,
         item.numero_guia_operadora || null,
@@ -487,7 +527,7 @@ export class FinanceiroCompactModel {
       
       const [result] = await pool.execute<ResultSetHeader>(
         `INSERT INTO financeiro_items (
-          lote_id, clinica_id, tipo_item, numero_guia_prestador, numero_guia_operadora,
+          lote_id, clinica_id, competencia, tipo_item, numero_guia_prestador, numero_guia_operadora,
           numero_carteira, data_autorizacao, data_execucao, codigo_item, descricao_item,
           quantidade_executada, valor_unitario, valor_total, status_pagamento,
           valor_pago, data_pagamento, parent_id, profissional_nome, profissional_conselho,
@@ -499,7 +539,7 @@ export class FinanceiroCompactModel {
           unidade_medida, reducao_acrescimo, hora_inicial, hora_final, sequencial_item,
           via_acesso, grau_participacao, executante_cpf, executante_nome, executante_conselho,
           executante_numero_conselho, executante_uf, executante_cbos, indicacao_acidente
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         values
       );
       
@@ -734,17 +774,41 @@ export class FinanceiroCompactModel {
   // ==================== MÉTODOS UTILITÁRIOS ====================
   
   // Processar XML TISS e criar estrutura completa
-  static async processarXMLTISS(xmlData: any, clinicaId: number): Promise<number> {
+  static async processarXMLTISS(xmlData: any, clinicaId: number, operadoraId?: number): Promise<number> {
     console.log('🔧 Processando XML TISS para clínica:', clinicaId);
+    console.log('🏢 Operadora ID fornecida:', operadoraId);
     console.log('📋 Dados recebidos:', JSON.stringify(xmlData, null, 2));
     
     try {
+    // Buscar dados da operadora se operadoraId foi fornecido
+    let operadoraData = {
+      registro_ans: xmlData.operadora?.registro_ans || null,
+      nome: xmlData.operadora?.nome || null
+    };
+
+    if (operadoraId) {
+      console.log('🔍 Buscando dados da operadora ID:', operadoraId);
+      const [operadoraRows] = await pool.execute<RowDataPacket[]>(
+        'SELECT registroANS as registro_ans, nome FROM operadoras WHERE id = ? AND status = ?',
+        [operadoraId, 'ativo']
+      );
+      
+      if (operadoraRows.length > 0) {
+        operadoraData = {
+          registro_ans: operadoraRows[0].registro_ans,
+          nome: operadoraRows[0].nome
+        };
+        console.log('✅ Dados da operadora encontrados:', operadoraData);
+      } else {
+        console.log('⚠️ Operadora não encontrada, usando dados do XML');
+      }
+    }
 
     // 1. Criar lote com validação de valores
     const loteId = await this.createLote({
       clinica_id: clinicaId,
-      operadora_registro_ans: xmlData.operadora?.registro_ans || null,
-      operadora_nome: xmlData.operadora?.nome || null,
+      operadora_registro_ans: operadoraData.registro_ans,
+      operadora_nome: operadoraData.nome,
       numero_lote: xmlData.lote?.numero || null,
       competencia: xmlData.lote?.competencia || null,
       data_envio: xmlData.lote?.data_envio || null,
@@ -778,6 +842,7 @@ export class FinanceiroCompactModel {
         const guiaId = await this.createGuia({
           lote_id: loteId,
           clinica_id: clinicaId,
+          competencia: xmlData.lote?.competencia || null,
           numero_guia_prestador: guiaData.numero_guia_prestador || null,
           numero_guia_operadora: guiaData.numero_guia_operadora || null,
           numero_carteira: guiaData.numero_carteira || null,
@@ -826,6 +891,7 @@ export class FinanceiroCompactModel {
             const procedimentoId = await this.createProcedimento({
               lote_id: loteId,
               clinica_id: clinicaId,
+              competencia: xmlData.lote?.competencia || null,
               parent_id: guiaId,
               numero_guia_prestador: guiaData.numero_guia_prestador,
               numero_guia_operadora: guiaData.numero_guia_operadora,
@@ -869,6 +935,7 @@ export class FinanceiroCompactModel {
             const medicamentoId = await this.createDespesa({
               lote_id: loteId,
               clinica_id: clinicaId,
+              competencia: xmlData.lote?.competencia || null,
               parent_id: guiaId,
               numero_guia_prestador: guiaData.numero_guia_prestador,
               numero_guia_operadora: guiaData.numero_guia_operadora,
@@ -900,6 +967,7 @@ export class FinanceiroCompactModel {
             const materialId = await this.createDespesa({
               lote_id: loteId,
               clinica_id: clinicaId,
+              competencia: xmlData.lote?.competencia || null,
               parent_id: guiaId,
               numero_guia_prestador: guiaData.numero_guia_prestador,
               numero_guia_operadora: guiaData.numero_guia_operadora,
@@ -931,6 +999,7 @@ export class FinanceiroCompactModel {
             const taxaId = await this.createDespesa({
               lote_id: loteId,
               clinica_id: clinicaId,
+              competencia: xmlData.lote?.competencia || null,
               parent_id: guiaId,
               numero_guia_prestador: guiaData.numero_guia_prestador,
               numero_guia_operadora: guiaData.numero_guia_operadora,
