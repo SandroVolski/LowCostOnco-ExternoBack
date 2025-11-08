@@ -175,13 +175,58 @@ class AuditorController {
         [id]
       );
 
+      // Buscar itens glosados deste recurso específico
+      let itensGlosados: RowDataPacket[] = [];
+      try {
+        const [itensResult] = await pool.execute<RowDataPacket[]>(
+          `SELECT 
+            id,
+            item_id,
+            tipo_item,
+            codigo_item,
+            descricao_item,
+            quantidade,
+            valor_unitario,
+            valor_total,
+            justificativa_item,
+            created_at
+           FROM recursos_glosas_itens
+           WHERE recurso_glosa_id = ?
+           ORDER BY created_at ASC`,
+          [id]
+        );
+        itensGlosados = itensResult;
+      } catch (itensError: any) {
+        // Se a tabela não existir ou houver erro, apenas logar e continuar com array vazio
+        console.warn('Erro ao buscar itens glosados (pode ser que a tabela não exista ainda):', itensError?.message || itensError);
+        itensGlosados = [];
+      }
+
       return res.json({
         success: true,
         data: {
           ...recurso,
           documentos,
           historico,
-          parecer_anterior: pareceres[0] || null
+          parecer_anterior: pareceres[0] || null,
+          itens_glosados: itensGlosados.map(item => ({
+            id: item.item_id || item.id || null,
+            item_id: item.item_id || item.id || null,
+            tipo: item.tipo_item || 'item',
+            codigo: item.codigo_item || null,
+            codigo_item: item.codigo_item || null,
+            codigo_procedimento: item.tipo_item === 'procedimento' ? (item.codigo_item || null) : null,
+            descricao: item.descricao_item || '',
+            descricao_item: item.descricao_item || '',
+            descricao_procedimento: item.tipo_item === 'procedimento' ? (item.descricao_item || '') : null,
+            quantidade: item.quantidade || 0,
+            quantidade_executada: item.quantidade || 0,
+            valor_unitario: item.valor_unitario || 0,
+            valor_total: item.valor_total || 0,
+            valor: item.valor_total || 0,
+            observacao: item.justificativa_item || '',
+            observacao_glosa: item.justificativa_item || ''
+          }))
         }
       });
 
