@@ -13,48 +13,43 @@ export class AnalysisController {
   // GET /api/analysis/organs - Buscar dados de análise por órgão
   static async getOrganAnalysis(req: AuthRequest, res: Response): Promise<void> {
     try {
-      console.log('🔧 Buscando dados de análise por órgão...');
-      
       const user: any = req.user;
-      
+
       // Extrair filtros da query
       const { clinicId, sex, ageMin, ageMax } = req.query;
-      console.log('🔧 Filtros recebidos:', { clinicId, sex, ageMin, ageMax });
-      console.log('🔧 Usuário:', user);
-      
+
       // Construir query com filtros
       let whereConditions = ['s.diagnostico_cid IS NOT NULL', "s.diagnostico_cid != ''"];
       const queryParams: any[] = [];
       let fromClause = 'FROM solicitacoes s';
-      
+
       // Se for operadora, fazer JOIN e filtrar por operadora_id
       if (user?.tipo === 'operadora' && user?.operadoraId) {
-        console.log('🔧 Filtrando análise para operadora ID:', user.operadoraId);
         fromClause = 'FROM solicitacoes s INNER JOIN clinicas c ON s.clinica_id = c.id';
         whereConditions.push('c.operadora_id = ?');
         queryParams.push(user.operadoraId);
       }
-      
+
       if (clinicId) {
         whereConditions.push('s.clinica_id = ?');
         queryParams.push(clinicId);
       }
-      
+
       if (sex) {
         whereConditions.push('s.sexo = ?');
         queryParams.push(sex);
       }
-      
+
       if (ageMin) {
         whereConditions.push('s.idade >= ?');
         queryParams.push(ageMin);
       }
-      
+
       if (ageMax) {
         whereConditions.push('s.idade <= ?');
         queryParams.push(ageMax);
       }
-      
+
       const analysisQuery = `
         SELECT 
           s.diagnostico_cid,
@@ -73,15 +68,9 @@ export class AnalysisController {
         ORDER BY s.created_at DESC
         LIMIT 1000
       `;
-      
-      console.log('🔧 Query final:', analysisQuery);
-      console.log('🔧 Parâmetros:', queryParams);
-      
+
       const solicitacoes = await query(analysisQuery, queryParams);
-      
-      console.log(`📊 ${solicitacoes.length} solicitações encontradas para análise`);
-      console.log('🔧 Primeiras 3 solicitações:', solicitacoes.slice(0, 3));
-      
+
       // Mapeamento de CIDs para órgãos
       const CID_TO_ORGAN_MAP: Record<string, string> = {
         // Sistema Nervoso Central
@@ -132,7 +121,7 @@ export class AnalysisController {
         'C50.6': 'breast', 'C50.8': 'breast', 'C50.9': 'breast',
         'C77.2': 'breast',
       };
-      
+
       // Mapeamento de órgãos para informações
       const ORGAN_INFO = {
         brain: { name: 'Cérebro', color: 'medical-purple', description: 'Tumores primários do sistema nervoso central' },
@@ -145,17 +134,16 @@ export class AnalysisController {
         prostate: { name: 'Próstata', color: 'medical-purple', description: 'Adenocarcinomas prostáticos' },
         breast: { name: 'Mama', color: 'medical-pink', description: 'Carcinomas mamários' },
       };
-      
+
       // Agrupar solicitações por órgão
       const organData: Record<string, any> = {};
       let processedCount = 0;
-      
+
       solicitacoes.forEach((solicitacao: any) => {
         const cid = solicitacao.diagnostico_cid;
         const organId = CID_TO_ORGAN_MAP[cid];
         
         if (!organId) {
-          console.log(`⚠️ CID não mapeado: ${cid} - ${solicitacao.diagnostico_descricao}`);
           return;
         }
         
@@ -211,9 +199,7 @@ export class AnalysisController {
           });
         }
       });
-      
-      console.log(`🔧 ${processedCount} solicitações processadas para órgãos`);
-      
+
       // Converter Maps para Arrays com contadores e formatar dados
       const analysisData = Object.values(organData).map((organ: any) => {
         // Converter CIDs
@@ -235,18 +221,14 @@ export class AnalysisController {
           protocols: protocolsArray.slice(0, 5) // Limitar a 5 protocolos
         };
       });
-      
-      console.log('✅ Dados de análise processados:', analysisData.length, 'órgãos');
-      console.log('🔧 Órgãos encontrados:', analysisData.map(o => `${o.organName} (${o.patients} pacientes)`));
-      
+
       const response: ApiResponse = {
         success: true,
         message: 'Dados de análise por órgão encontrados com sucesso',
         data: analysisData
       };
-      
+
       res.json(response);
-      
     } catch (error) {
       console.error('❌ Erro ao buscar dados de análise por órgão:', error);
       const response: ApiResponse = {
@@ -261,24 +243,19 @@ export class AnalysisController {
   // GET /api/analysis/metrics - Buscar métricas gerais de análise
   static async getAnalysisMetrics(req: AuthRequest, res: Response): Promise<void> {
     try {
-      console.log('🔧 Buscando métricas de análise...');
-      
       const user: any = req.user;
-      
+
       // Extrair filtros da query
       const { clinicId, sex, ageMin, ageMax } = req.query;
-      console.log('🔧 Filtros recebidos para métricas:', { clinicId, sex, ageMin, ageMax });
-      console.log('🔧 Usuário:', user);
-      
+
       // Construir condições WHERE para filtros
       let whereConditions = [];
       const queryParams: any[] = [];
       let fromClause = 'FROM solicitacoes s';
       let tablePrefix = '';
-      
+
       // Se for operadora, fazer JOIN e filtrar por operadora_id
       if (user?.tipo === 'operadora' && user?.operadoraId) {
-        console.log('🔧 Filtrando métricas para operadora ID:', user.operadoraId);
         fromClause = 'FROM solicitacoes s INNER JOIN clinicas c ON s.clinica_id = c.id';
         tablePrefix = 's.';
         whereConditions.push('c.operadora_id = ?');
@@ -286,47 +263,47 @@ export class AnalysisController {
       } else {
         tablePrefix = '';
       }
-      
+
       if (clinicId) {
         whereConditions.push(`${tablePrefix || 's.'}clinica_id = ?`);
         queryParams.push(clinicId);
       }
-      
+
       if (sex) {
         whereConditions.push(`${tablePrefix || 's.'}sexo = ?`);
         queryParams.push(sex);
       }
-      
+
       if (ageMin) {
         whereConditions.push(`${tablePrefix || 's.'}idade >= ?`);
         queryParams.push(ageMin);
       }
-      
+
       if (ageMax) {
         whereConditions.push(`${tablePrefix || 's.'}idade <= ?`);
         queryParams.push(ageMax);
       }
-      
+
       const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
       const whereClauseWithCid = whereConditions.length > 0 
         ? `WHERE ${whereConditions.join(' AND ')} AND ${tablePrefix || 's.'}diagnostico_cid IS NOT NULL AND ${tablePrefix || 's.'}diagnostico_cid != ""`
         : `WHERE ${tablePrefix || 's.'}diagnostico_cid IS NOT NULL AND ${tablePrefix || 's.'}diagnostico_cid != ""`;
-      
+
       // Buscar métricas em paralelo
       const [solicitacoesResult, protocolosResult, cidsResult] = await Promise.all([
         query(`SELECT COUNT(*) as total ${fromClause} ${whereClause}`, queryParams),
         query('SELECT COUNT(*) as total FROM protocolos', []),
         query(`SELECT COUNT(DISTINCT ${tablePrefix || 's.'}diagnostico_cid) as total ${fromClause} ${whereClauseWithCid}`, queryParams)
       ]);
-      
+
       const totalSolicitacoes = solicitacoesResult[0]?.total || 0;
       const totalProtocolos = protocolosResult[0]?.total || 0;
       const totalCids = cidsResult[0]?.total || 0;
-      
+
       // Buscar pacientes únicos
       const pacientesResult = await query(`SELECT COUNT(DISTINCT JSON_UNQUOTE(JSON_EXTRACT(${tablePrefix || 's.'}cliente_dados,'$.nome'))) as total ${fromClause} ${whereClause}`, queryParams);
       const totalPacientes = pacientesResult[0]?.total || 0;
-      
+
       // Buscar sistemas monitorados (órgãos únicos)
       const sistemasResult = await query(`
         SELECT COUNT(DISTINCT 
@@ -346,9 +323,9 @@ export class AnalysisController {
         ${fromClause} 
         ${whereClauseWithCid}
       `, queryParams);
-      
+
       const sistemasMonitorados = sistemasResult[0]?.total || 0;
-      
+
       const metrics = {
         totalSolicitacoes,
         totalPacientes,
@@ -356,17 +333,14 @@ export class AnalysisController {
         protocolosAtivos: totalProtocolos,
         cidsCadastrados: totalCids,
       };
-      
-      console.log('✅ Métricas calculadas:', metrics);
-      
+
       const response: ApiResponse = {
         success: true,
         message: 'Métricas de análise encontradas com sucesso',
         data: metrics
       };
-      
+
       res.json(response);
-      
     } catch (error) {
       console.error('❌ Erro ao buscar métricas de análise:', error);
       const response: ApiResponse = {
@@ -381,50 +355,45 @@ export class AnalysisController {
   // GET /api/analysis/kpis - Buscar KPIs operacionais
   static async getOperationalKPIs(req: AuthRequest, res: Response): Promise<void> {
     try {
-      console.log('🔧 Buscando KPIs operacionais...');
-      
       const user: any = req.user;
-      
+
       // Extrair filtros da query
       const { clinicId, sex, ageMin, ageMax } = req.query;
-      console.log('🔧 Filtros recebidos para KPIs:', { clinicId, sex, ageMin, ageMax });
-      console.log('🔧 Usuário:', user);
-      
+
       // Construir condições WHERE para filtros
       let whereConditions = ['s.data_solicitacao >= DATE_SUB(NOW(), INTERVAL 30 DAY)'];
       const queryParams: any[] = [];
       let fromClause = 'FROM solicitacoes s';
-      
+
       // Se for operadora, fazer JOIN e filtrar por operadora_id
       if (user?.tipo === 'operadora' && user?.operadoraId) {
-        console.log('🔧 Filtrando KPIs para operadora ID:', user.operadoraId);
         fromClause = 'FROM solicitacoes s INNER JOIN clinicas c ON s.clinica_id = c.id';
         whereConditions.push('c.operadora_id = ?');
         queryParams.push(user.operadoraId);
       }
-      
+
       if (clinicId) {
         whereConditions.push('s.clinica_id = ?');
         queryParams.push(clinicId);
       }
-      
+
       if (sex) {
         whereConditions.push("JSON_UNQUOTE(JSON_EXTRACT(s.cliente_dados, '$.sexo')) = ?");
         queryParams.push(sex);
       }
-      
+
       if (ageMin) {
         whereConditions.push("TIMESTAMPDIFF(YEAR, DATE(JSON_UNQUOTE(JSON_EXTRACT(s.cliente_dados, '$.data_nascimento'))), CURDATE()) >= ?");
         queryParams.push(ageMin);
       }
-      
+
       if (ageMax) {
         whereConditions.push("TIMESTAMPDIFF(YEAR, DATE(JSON_UNQUOTE(JSON_EXTRACT(s.cliente_dados, '$.data_nascimento'))), CURDATE()) <= ?");
         queryParams.push(ageMax);
       }
-      
+
       const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
-      
+
       // Taxa de aprovação (últimos 30 dias)
       const aprovacaoResult = await query(`
         SELECT 
@@ -433,11 +402,11 @@ export class AnalysisController {
         ${fromClause}
         ${whereClause}
       `, queryParams);
-      
+
       const total = aprovacaoResult[0]?.total || 0;
       const aprovados = aprovacaoResult[0]?.aprovados || 0;
       const taxaAprovacao = total > 0 ? Math.round((aprovados / total) * 100) : 0;
-      
+
       // Tempo médio de aprovação (em horas)
       const tempoWhereConditions = [...whereConditions, "s.status = 'aprovada'", 's.updated_at IS NOT NULL'];
       const tempoResult = await query(`
@@ -445,9 +414,9 @@ export class AnalysisController {
         ${fromClause}
         WHERE ${tempoWhereConditions.join(' AND ')}
       `, queryParams);
-      
+
       const tempoMedio = Math.round(tempoResult[0]?.tempo_medio || 24);
-      
+
       // Custo médio por paciente (baseado em dados reais se existirem, senão 0)
       const custoResult = await query(`
         SELECT 
@@ -456,12 +425,12 @@ export class AnalysisController {
         ${fromClause}
         ${whereClause}
       `, queryParams);
-      
+
       const pacientesUnicos = custoResult[0]?.pacientes_unicos || 1;
       const totalSolicitacoes = custoResult[0]?.total_solicitacoes || 1;
       // Remover cálculo de custo simulado - usar 0 até termos dados reais
       const custoMedio = 0;
-      
+
       const kpis = {
         taxaAprovacao,
         tempoMedioAprovacao: tempoMedio,
@@ -469,17 +438,14 @@ export class AnalysisController {
         totalSolicitacoes30Dias: total,
         pacientesUnicos30Dias: pacientesUnicos
       };
-      
-      console.log('✅ KPIs calculados:', kpis);
-      
+
       const response: ApiResponse = {
         success: true,
         message: 'KPIs operacionais encontrados com sucesso',
         data: kpis
       };
-      
+
       res.json(response);
-      
     } catch (error) {
       console.error('❌ Erro ao buscar KPIs operacionais:', error);
       const response: ApiResponse = {
@@ -494,15 +460,11 @@ export class AnalysisController {
   // GET /api/analysis/charts - Buscar dados para gráficos
   static async getChartData(req: AuthRequest, res: Response): Promise<void> {
     try {
-      console.log('🔧 Buscando dados para gráficos...');
-      
       const user: any = req.user;
-      
+
       // Extrair filtros da query
       const { clinicId, sex, ageMin, ageMax } = req.query;
-      console.log('🔧 Filtros recebidos para gráficos:', { clinicId, sex, ageMin, ageMax });
-      console.log('🔧 Usuário:', user);
-      
+
       // Construir condições WHERE para filtros
       let whereConditions = [
         "JSON_EXTRACT(s.medicamentos, '$.antineoplasticos') IS NOT NULL",
@@ -511,37 +473,36 @@ export class AnalysisController {
       ];
       const queryParams: any[] = [];
       let fromClause = 'FROM solicitacoes s';
-      
+
       // Se for operadora, fazer JOIN e filtrar por operadora_id
       if (user?.tipo === 'operadora' && user?.operadoraId) {
-        console.log('🔧 Filtrando gráficos para operadora ID:', user.operadoraId);
         fromClause = 'FROM solicitacoes s INNER JOIN clinicas c ON s.clinica_id = c.id';
         whereConditions.push('c.operadora_id = ?');
         queryParams.push(user.operadoraId);
       }
-      
+
       if (clinicId) {
         whereConditions.push('s.clinica_id = ?');
         queryParams.push(clinicId);
       }
-      
+
       if (sex) {
         whereConditions.push("JSON_UNQUOTE(JSON_EXTRACT(s.cliente_dados, '$.sexo')) = ?");
         queryParams.push(sex);
       }
-      
+
       if (ageMin) {
         whereConditions.push("TIMESTAMPDIFF(YEAR, DATE(JSON_UNQUOTE(JSON_EXTRACT(s.cliente_dados, '$.data_nascimento'))), CURDATE()) >= ?");
         queryParams.push(ageMin);
       }
-      
+
       if (ageMax) {
         whereConditions.push("TIMESTAMPDIFF(YEAR, DATE(JSON_UNQUOTE(JSON_EXTRACT(s.cliente_dados, '$.data_nascimento'))), CURDATE()) <= ?");
         queryParams.push(ageMax);
       }
-      
+
       const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
-      
+
       // Dados de medicamentos mais utilizados (agrupados e limpos)
       const medicamentosResult = await query(`
         SELECT 
@@ -553,10 +514,10 @@ export class AnalysisController {
         ORDER BY total DESC
         LIMIT 8
       `, queryParams);
-      
+
       // Processar e limpar dados de medicamentos
       const medicamentosMap = new Map();
-      
+
       medicamentosResult.forEach((row: any) => {
         const medicamento = row.medicamentos_antineoplasticos.trim();
         if (medicamento && medicamento !== '') {
@@ -570,25 +531,25 @@ export class AnalysisController {
           }
         }
       });
-      
+
       // Converter para array e ordenar por quantidade
       const medicamentos = Array.from(medicamentosMap.entries())
         .map(([name, value]) => ({ name, value }))
         .sort((a, b) => b.value - a.value)
         .slice(0, 6); // Limitar a 6 medicamentos para melhor visualização
-      
+
       // Dados de tipos de câncer por órgão
       const cancerWhereConditions = [
         's.diagnostico_cid IS NOT NULL',
         "s.diagnostico_cid != ''",
         's.data_solicitacao >= DATE_SUB(NOW(), INTERVAL 6 MONTH)'
       ];
-      
+
       // Adicionar filtro de operadora se necessário
       if (user?.tipo === 'operadora' && user?.operadoraId) {
         cancerWhereConditions.push('c.operadora_id = ?');
       }
-      
+
       if (clinicId) {
         cancerWhereConditions.push('s.clinica_id = ?');
       }
@@ -601,9 +562,9 @@ export class AnalysisController {
       if (ageMax) {
         cancerWhereConditions.push('s.idade <= ?');
       }
-      
+
       const cancerWhereClause = `WHERE ${cancerWhereConditions.join(' AND ')}`;
-      
+
       const cancerTypesResult = await query(`
         SELECT 
           CASE 
@@ -620,15 +581,15 @@ export class AnalysisController {
         GROUP BY tipo_cancer
         ORDER BY casos DESC
       `, queryParams);
-      
+
       // Dados mensais (últimos 6 meses)
       const monthlyWhereConditions = ['s.data_solicitacao >= DATE_SUB(NOW(), INTERVAL 6 MONTH)'];
-      
+
       // Adicionar filtro de operadora se necessário
       if (user?.tipo === 'operadora' && user?.operadoraId) {
         monthlyWhereConditions.push('c.operadora_id = ?');
       }
-      
+
       if (clinicId) {
         monthlyWhereConditions.push('s.clinica_id = ?');
       }
@@ -641,9 +602,9 @@ export class AnalysisController {
       if (ageMax) {
         monthlyWhereConditions.push("TIMESTAMPDIFF(YEAR, DATE(JSON_UNQUOTE(JSON_EXTRACT(s.cliente_dados, '$.data_nascimento'))), CURDATE()) <= ?");
       }
-      
+
       const monthlyWhereClause = `WHERE ${monthlyWhereConditions.join(' AND ')}`;
-      
+
       const monthlyResult = await query(`
         SELECT 
           DATE_FORMAT(s.data_solicitacao, '%Y-%m') as mes,
@@ -654,29 +615,26 @@ export class AnalysisController {
         GROUP BY DATE_FORMAT(s.data_solicitacao, '%Y-%m')
         ORDER BY mes ASC
       `, queryParams);
-      
+
       const monthlyData = monthlyResult.map((row: any) => ({
         name: new Date(row.mes + '-01').toLocaleDateString('pt-BR', { month: 'short' }),
         solicitacoes: row.solicitacoes,
         patients: row.pacientes_unicos
       }));
-      
+
       const chartData = {
         medicamentos,
         cancerTypes: cancerTypesResult,
         monthlyData
       };
-      
-      console.log('✅ Dados de gráficos calculados:', chartData);
-      
+
       const response: ApiResponse = {
         success: true,
         message: 'Dados para gráficos encontrados com sucesso',
         data: chartData
       };
-      
+
       res.json(response);
-      
     } catch (error) {
       console.error('❌ Erro ao buscar dados de gráficos:', error);
       const response: ApiResponse = {

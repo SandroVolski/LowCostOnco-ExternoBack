@@ -17,18 +17,14 @@ export class OperadoraController {
   // GET /api/operadoras/admin - Listar todas as operadoras (para administradores)
   static async getAllOperadoras(req: Request, res: Response): Promise<void> {
     try {
-      console.log('🔧 Buscando todas as operadoras...');
-      
       const operadoras = await OperadoraModel.findAll();
-      
-      console.log(`✅ ${operadoras.length} operadoras encontradas`);
-      
+
       const response: ApiResponse = {
         success: true,
         message: 'Operadoras listadas com sucesso',
         data: operadoras
       };
-      
+
       res.json(response);
     } catch (error) {
       console.error('❌ Erro ao listar operadoras:', error);
@@ -45,9 +41,8 @@ export class OperadoraController {
   static async getOperadoraById(req: Request, res: Response): Promise<void> {
     try {
       const id = parseInt(req.params.id);
-      
+
       if (isNaN(id)) {
-        console.log('❌ ID inválido:', req.params.id);
         const response: ApiResponse = {
           success: false,
           message: 'ID inválido'
@@ -55,13 +50,10 @@ export class OperadoraController {
         res.status(400).json(response);
         return;
       }
-      
-      console.log('🔧 Buscando operadora ID:', id);
-      
+
       const operadora = await OperadoraModel.findById(id);
-      
+
       if (!operadora) {
-        console.log('❌ Operadora não encontrada para ID:', id);
         const response: ApiResponse = {
           success: false,
           message: 'Operadora não encontrada'
@@ -69,15 +61,13 @@ export class OperadoraController {
         res.status(404).json(response);
         return;
       }
-      
-      console.log('✅ Operadora encontrada:', operadora.nome);
-      
+
       const response: ApiResponse = {
         success: true,
         message: 'Operadora encontrada com sucesso',
         data: operadora
       };
-      
+
       res.json(response);
     } catch (error) {
       console.error('❌ Erro ao buscar operadora:', error);
@@ -94,13 +84,9 @@ export class OperadoraController {
   static async createOperadora(req: Request, res: Response): Promise<void> {
     try {
       const operadoraData: OperadoraCreateInput = req.body;
-      
-      console.log('🔧 Criando nova operadora...');
-      console.log('📋 Dados recebidos:', JSON.stringify(operadoraData, null, 2));
-      
+
       // Validações básicas
       if (!operadoraData.nome || !operadoraData.codigo) {
-        console.log('❌ Nome e código são obrigatórios');
         const response: ApiResponse = {
           success: false,
           message: 'Nome e código são obrigatórios'
@@ -108,11 +94,10 @@ export class OperadoraController {
         res.status(400).json(response);
         return;
       }
-      
+
       // Verificar se código já existe
       const codigoExists = await OperadoraModel.checkCodeExists(operadoraData.codigo);
       if (codigoExists) {
-        console.log('❌ Código já existe:', operadoraData.codigo);
         const response: ApiResponse = {
           success: false,
           message: 'Código já está em uso'
@@ -120,45 +105,35 @@ export class OperadoraController {
         res.status(400).json(response);
         return;
       }
-      
+
       // Gerar credenciais automaticamente se não fornecidas
       let email = operadoraData.email;
       let username = operadoraData.username;
       let senhaOriginal = operadoraData.senha;
       let senhaHash = operadoraData.senha;
-      
+
       if (!email) {
         // Gerar email baseado no código (ex: "UNI001" -> "uni001@operadora.com")
         email = `${operadoraData.codigo.toLowerCase().replace(/[^a-z0-9]/g, '')}@operadora.com`;
-        console.log('🔧 Email gerado automaticamente:', email);
       }
-      
+
       if (!username) {
         // Gerar username baseado no código
         username = operadoraData.codigo.toLowerCase().replace(/[^a-z0-9]/g, '');
-        console.log('🔧 Username gerado automaticamente:', username);
       }
-      
+
       if (!senhaOriginal) {
         // Gerar senha padrão: codigo@2025
         senhaOriginal = `${operadoraData.codigo}@2025`;
-        console.log('🔧 Senha gerada automaticamente (formato: codigo@2025)');
       }
-      
+
       // Hash da senha
       senhaHash = await bcrypt.hash(senhaOriginal, 10);
-      
+
       const novaOperadora = await OperadoraModel.create(operadoraData);
-      
-      console.log('✅ Operadora criada com sucesso:', novaOperadora.nome);
-      
+
       // SEMPRE criar usuário na tabela usuarios para login
       try {
-        console.log('🔧 Criando usuário na tabela usuarios...');
-        console.log('   - Email:', email);
-        console.log('   - Username:', username);
-        console.log('   - Operadora ID:', novaOperadora.id);
-        
         const insertUserQuery = `
           INSERT INTO usuarios (
             nome,
@@ -173,7 +148,7 @@ export class OperadoraController {
           )
           VALUES (?, ?, ?, ?, 'operadora_admin', ?, 'ativo', NOW(), NOW())
         `;
-        
+
         const result = await query(insertUserQuery, [
           novaOperadora.nome,
           email,
@@ -181,12 +156,6 @@ export class OperadoraController {
           senhaHash, 
           novaOperadora.id
         ]);
-        
-        console.log('✅ Usuário criado na tabela usuarios com ID:', result.insertId);
-        console.log('📋 Credenciais de acesso:');
-        console.log('   - Email:', email);
-        console.log('   - Username:', username);
-        console.log('   - Senha:', senhaOriginal);
       } catch (userError) {
         console.error('❌ ERRO CRÍTICO ao criar usuário na tabela usuarios:', userError);
         console.error('❌ Detalhes do erro:', {
@@ -204,7 +173,7 @@ export class OperadoraController {
         res.status(500).json(response);
         return;
       }
-      
+
       const response: ApiResponse = {
         success: true,
         message: 'Operadora criada com sucesso',
@@ -218,7 +187,7 @@ export class OperadoraController {
           }
         }
       };
-      
+
       res.status(201).json(response);
     } catch (error) {
       console.error('❌ Erro ao criar operadora:', error);
@@ -236,13 +205,8 @@ export class OperadoraController {
     try {
       const id = parseInt(req.params.id);
       const updateData: OperadoraUpdateInput = req.body;
-      
-      console.log('🔧 Iniciando atualização de operadora...');
-      console.log('📋 ID recebido:', req.params.id);
-      console.log('📋 Dados recebidos:', JSON.stringify(updateData, null, 2));
-      
+
       if (isNaN(id)) {
-        console.log('❌ ID inválido:', req.params.id);
         const response: ApiResponse = {
           success: false,
           message: 'ID inválido'
@@ -250,10 +214,9 @@ export class OperadoraController {
         res.status(400).json(response);
         return;
       }
-      
+
       // Validar dados básicos
       if (!updateData || Object.keys(updateData).length === 0) {
-        console.log('❌ Nenhum dado para atualizar');
         const response: ApiResponse = {
           success: false,
           message: 'Nenhum dado fornecido para atualização'
@@ -261,14 +224,9 @@ export class OperadoraController {
         res.status(400).json(response);
         return;
       }
-      
-      console.log('🔧 Atualizando operadora ID:', id);
-      
-      // Verificar se operadora existe
-      console.log('🔍 Verificando se operadora existe...');
+
       const operadoraExistente = await OperadoraModel.findById(id);
       if (!operadoraExistente) {
-        console.log('❌ Operadora não encontrada para ID:', id);
         const response: ApiResponse = {
           success: false,
           message: 'Operadora não encontrada'
@@ -276,15 +234,11 @@ export class OperadoraController {
         res.status(404).json(response);
         return;
       }
-      
-      console.log('✅ Operadora encontrada:', operadoraExistente.nome);
-      
+
       // Verificar se código já existe (se estiver sendo alterado)
       if (updateData.codigo && updateData.codigo !== operadoraExistente.codigo) {
-        console.log('🔍 Verificando se código já existe...');
         const codigoExists = await OperadoraModel.checkCodeExists(updateData.codigo, id);
         if (codigoExists) {
-          console.log('❌ Código já existe:', updateData.codigo);
           const response: ApiResponse = {
             success: false,
             message: 'Código já está em uso'
@@ -293,12 +247,10 @@ export class OperadoraController {
           return;
         }
       }
-      
-      console.log('🔄 Executando atualização...');
+
       const operadoraAtualizada = await OperadoraModel.update(id, updateData);
-      
+
       if (!operadoraAtualizada) {
-        console.log('❌ Falha na atualização da operadora - retorno null');
         const response: ApiResponse = {
           success: false,
           message: 'Erro ao atualizar operadora no banco de dados'
@@ -306,15 +258,13 @@ export class OperadoraController {
         res.status(500).json(response);
         return;
       }
-      
-      console.log('✅ Operadora atualizada com sucesso:', operadoraAtualizada.nome);
-      
+
       const response: ApiResponse = {
         success: true,
         message: 'Operadora atualizada com sucesso',
         data: operadoraAtualizada
       };
-      
+
       res.json(response);
     } catch (error) {
       console.error('❌ ERRO DETALHADO ao atualizar operadora:');
@@ -339,9 +289,8 @@ export class OperadoraController {
   static async deleteOperadora(req: Request, res: Response): Promise<void> {
     try {
       const id = parseInt(req.params.id);
-      
+
       if (isNaN(id)) {
-        console.log('❌ ID inválido:', req.params.id);
         const response: ApiResponse = {
           success: false,
           message: 'ID inválido'
@@ -349,13 +298,10 @@ export class OperadoraController {
         res.status(400).json(response);
         return;
       }
-      
-      console.log('🔧 Deletando operadora ID:', id);
-      
+
       // Verificar se operadora existe
       const operadoraExistente = await OperadoraModel.findById(id);
       if (!operadoraExistente) {
-        console.log('❌ Operadora não encontrada para ID:', id);
         const response: ApiResponse = {
           success: false,
           message: 'Operadora não encontrada'
@@ -363,18 +309,16 @@ export class OperadoraController {
         res.status(404).json(response);
         return;
       }
-      
+
       const deleted = await OperadoraModel.delete(id);
-      
+
       if (deleted) {
-        console.log('✅ Operadora deletada com sucesso:', operadoraExistente.nome);
         const response: ApiResponse = {
           success: true,
           message: 'Operadora deletada com sucesso'
         };
         res.json(response);
       } else {
-        console.log('❌ Falha na deleção da operadora');
         const response: ApiResponse = {
           success: false,
           message: 'Erro ao deletar operadora'
@@ -395,18 +339,14 @@ export class OperadoraController {
   // GET /api/operadoras - Listar operadoras para clínicas
   static async getOperadorasForClinica(req: Request, res: Response): Promise<void> {
     try {
-      console.log('🔧 Buscando operadoras para clínica...');
-      
       const operadoras = await OperadoraModel.findAll();
-      
-      console.log(`✅ ${operadoras.length} operadoras encontradas para clínica`);
-      
+
       const response: ApiResponse = {
         success: true,
         message: 'Operadoras listadas com sucesso',
         data: operadoras
       };
-      
+
       res.json(response);
     } catch (error) {
       console.error('❌ Erro ao listar operadoras para clínica:', error);
@@ -423,7 +363,7 @@ export class OperadoraController {
   static async getOperadoraByClinica(req: Request, res: Response): Promise<void> {
     try {
       const clinicaId = parseInt(req.params.clinicaId);
-      
+
       if (isNaN(clinicaId)) {
         res.status(400).json({
           success: false,
@@ -431,9 +371,7 @@ export class OperadoraController {
         });
         return;
       }
-      
-      console.log('🔧 Buscando operadora da clínica:', clinicaId);
-      
+
       // Buscar a operadora da clínica
       const sql = `
         SELECT o.* 
@@ -442,9 +380,9 @@ export class OperadoraController {
         WHERE c.id = ? AND o.status = 'ativo'
         LIMIT 1
       `;
-      
+
       const operadoras = await query(sql, [clinicaId]);
-      
+
       if (operadoras.length === 0) {
         res.status(404).json({
           success: false,
@@ -452,16 +390,15 @@ export class OperadoraController {
         });
         return;
       }
-      
+
       const operadora = operadoras[0];
-      console.log('✅ Operadora encontrada:', operadora.nome);
-      
+
       const response: ApiResponse = {
         success: true,
         message: 'Operadora encontrada',
         data: operadora
       };
-      
+
       res.json(response);
     } catch (error) {
       console.error('❌ Erro ao buscar operadora da clínica:', error);

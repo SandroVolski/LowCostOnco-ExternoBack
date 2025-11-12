@@ -17,12 +17,7 @@ async function setupChatSimples() {
   let connection;
   
   try {
-    console.log('🔧 Conectando ao banco bd_onkhos...');
     connection = await mysql.createConnection(dbConfig);
-    console.log('✅ Conectado ao banco bd_onkhos');
-    
-    // 1. Criar tabela conversas
-    console.log('📋 Criando tabela conversas...');
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS conversas (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -48,10 +43,6 @@ async function setupChatSimples() {
         UNIQUE KEY unique_operadora_clinica (operadora_id, clinica_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
-    console.log('✅ Tabela conversas criada');
-    
-    // 2. Criar tabela mensagens
-    console.log('📋 Criando tabela mensagens...');
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS mensagens (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -72,27 +63,18 @@ async function setupChatSimples() {
         INDEX idx_conversa_data (conversa_id, created_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
-    console.log('✅ Tabela mensagens criada');
-    
-    // 3. Adicionar foreign key para última mensagem (se não existir)
-    console.log('📋 Adicionando foreign key para última mensagem...');
     try {
       await connection.execute(`
         ALTER TABLE conversas 
         ADD CONSTRAINT fk_conversas_ultima_mensagem 
         FOREIGN KEY (ultima_mensagem_id) REFERENCES mensagens(id) ON DELETE SET NULL
       `);
-      console.log('✅ Foreign key adicionada');
     } catch (error) {
-      if (error.code === 'ER_DUP_KEYNAME') {
-        console.log('ℹ️ Foreign key já existe');
-      } else {
+      if (error.code === 'ER_DUP_KEYNAME') {} else {
         throw error;
       }
     }
-    
-    // 4. Criar view conversas_completas
-    console.log('📋 Criando view conversas_completas...');
+
     await connection.execute(`
       CREATE OR REPLACE VIEW conversas_completas AS
       SELECT 
@@ -125,10 +107,6 @@ async function setupChatSimples() {
       JOIN clinicas cl ON c.clinica_id = cl.id
       WHERE c.ativa = TRUE
     `);
-    console.log('✅ View conversas_completas criada');
-    
-    // 5. Criar view mensagens_completas
-    console.log('📋 Criando view mensagens_completas...');
     await connection.execute(`
       CREATE OR REPLACE VIEW mensagens_completas AS
       SELECT 
@@ -153,57 +131,28 @@ async function setupChatSimples() {
       JOIN clinicas cl ON c.clinica_id = cl.id
       ORDER BY m.created_at ASC
     `);
-    console.log('✅ View mensagens_completas criada');
-    
-    // 6. Verificar se as tabelas foram criadas
-    console.log('🔍 Verificando tabelas criadas...');
-    
+
     const [tables] = await connection.execute(`
       SELECT TABLE_NAME 
       FROM information_schema.TABLES 
       WHERE TABLE_SCHEMA = ? AND TABLE_NAME IN ('conversas', 'mensagens')
     `, [process.env.DB_NAME || 'bd_onkhos']);
-    
-    console.log('📊 Tabelas encontradas:');
-    tables.forEach(table => {
-      console.log(`   - ${table.TABLE_NAME}`);
-    });
-    
-    // 7. Verificar dados existentes
-    console.log('🔍 Verificando dados existentes...');
-    
+
+    tables.forEach(table => {});
+
     const [operadoras] = await connection.execute('SELECT COUNT(*) as count FROM operadoras');
     const [clinicas] = await connection.execute('SELECT COUNT(*) as count FROM clinicas');
-    
-    console.log(`📊 Operadoras cadastradas: ${operadoras[0].count}`);
-    console.log(`📊 Clínicas cadastradas: ${clinicas[0].count}`);
-    
-    if (operadoras[0].count === 0 || clinicas[0].count === 0) {
-      console.log('⚠️ É necessário ter pelo menos uma operadora e uma clínica para testar o chat');
-    }
-    
-    console.log('\n🎉 Sistema de chat simplificado configurado com sucesso no bd_onkhos!');
-    console.log('📝 Próximos passos:');
-    console.log('   1. Reinicie o servidor backend');
-    console.log('   2. Teste as funcionalidades de chat');
-    console.log('   3. Verifique se as operadoras e clínicas podem se comunicar');
-    
+
+    if (operadoras[0].count === 0 || clinicas[0].count === 0) {}
   } catch (error) {
     console.error('❌ Erro ao configurar sistema de chat:', error);
     
-    if (error.code === 'ER_NO_SUCH_TABLE') {
-      console.log('💡 Dica: Verifique se as tabelas operadoras e clinicas existem no bd_onkhos');
-    } else if (error.code === 'ER_ACCESS_DENIED_ERROR') {
-      console.log('💡 Dica: Verifique as credenciais do banco de dados');
-    } else if (error.code === 'ER_BAD_DB_ERROR') {
-      console.log('💡 Dica: Verifique se o banco bd_onkhos existe');
-    }
+    if (error.code === 'ER_NO_SUCH_TABLE') {} else if (error.code === 'ER_ACCESS_DENIED_ERROR') {} else if (error.code === 'ER_BAD_DB_ERROR') {}
     
     process.exit(1);
   } finally {
     if (connection) {
       await connection.end();
-      console.log('🔌 Conexão com banco encerrada');
     }
   }
 }

@@ -16,8 +16,6 @@ export class DashboardController {
   // GET /api/dashboard/metrics - Métricas do dashboard
   static async getMetrics(req: AuthRequest, res: Response): Promise<void> {
     try {
-      console.log('🔧 Buscando métricas do dashboard...');
-      
       // Dados simulados para evitar erros SQL
       const metrics = {
         totalClinicas: 5,
@@ -34,17 +32,14 @@ export class DashboardController {
         taxaAprovacao: 77.8,
         tempoMedioResposta: 2.1
       };
-      
-      console.log('✅ Métricas carregadas:', metrics);
-      
+
       const response: ApiResponse = {
         success: true,
         message: 'Métricas obtidas com sucesso',
         data: metrics
       };
-      
+
       res.json(response);
-      
     } catch (error) {
       console.error('❌ Erro ao buscar métricas:', error);
       const response: ApiResponse = {
@@ -59,8 +54,6 @@ export class DashboardController {
   // GET /api/dashboard/charts - Dados para gráficos
   static async getChartsData(req: AuthRequest, res: Response): Promise<void> {
     try {
-      console.log('🔧 Buscando dados para gráficos...');
-      
       // Dados simulados para gráficos
       const chartsData = {
         chartData: [
@@ -79,17 +72,14 @@ export class DashboardController {
           { name: '5-Fluorouracila', count: 4 }
         ]
       };
-      
-      console.log('✅ Dados de gráficos carregados');
-      
+
       const response: ApiResponse = {
         success: true,
         message: 'Dados de gráficos obtidos com sucesso',
         data: chartsData
       };
-      
+
       res.json(response);
-      
     } catch (error) {
       console.error('❌ Erro ao buscar dados de gráficos:', error);
       const response: ApiResponse = {
@@ -104,8 +94,6 @@ export class DashboardController {
   // GET /api/dashboard/performance - Performance das clínicas
   static async getClinicasPerformance(req: AuthRequest, res: Response): Promise<void> {
     try {
-      console.log('🔧 Buscando performance das clínicas...');
-      
       // Dados simulados para performance
       const performance = [
         {
@@ -127,17 +115,14 @@ export class DashboardController {
           tempo_medio: 2.8
         }
       ];
-      
-      console.log('✅ Performance das clínicas carregada');
-      
+
       const response: ApiResponse = {
         success: true,
         message: 'Performance das clínicas obtida com sucesso',
         data: performance
       };
-      
+
       res.json(response);
-      
     } catch (error) {
       console.error('❌ Erro ao buscar performance das clínicas:', error);
       const response: ApiResponse = {

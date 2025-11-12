@@ -267,19 +267,16 @@ export class FinanceiroCompactModel {
   // ==================== LOTES ====================
   
   static async createLote(lote: LoteFinanceiroInput): Promise<number> {
-    console.log('🔧 Criando lote com dados:', lote);
-    
     // Verificar se o lote já existe
     const [existingLotes] = await pool.execute<LoteFinanceiro[]>(
       'SELECT id FROM financeiro_lotes WHERE clinica_id = ? AND numero_lote = ? AND operadora_registro_ans = ?',
       [lote.clinica_id, lote.numero_lote, lote.operadora_registro_ans]
     );
-    
+
     if (existingLotes.length > 0) {
-      console.log('⚠️ Lote já existe, retornando ID existente:', existingLotes[0].id);
       return existingLotes[0].id;
     }
-    
+
     const [result] = await pool.execute<ResultSetHeader>(
       `INSERT INTO financeiro_lotes (
         clinica_id, operadora_registro_ans, operadora_nome, numero_lote,
@@ -365,19 +362,6 @@ export class FinanceiroCompactModel {
     const lote = await this.getLoteById(loteId);
     if (!lote) return null;
 
-    console.log('📋 Dados do lote do banco:', {
-      tipo_transacao: lote.tipo_transacao,
-      sequencial_transacao: lote.sequencial_transacao,
-      data_registro_transacao: lote.data_registro_transacao,
-      hora_registro_transacao: lote.hora_registro_transacao,
-      cnpj_prestador: lote.cnpj_prestador,
-      nome_prestador: lote.nome_prestador,
-      registro_ans: lote.registro_ans,
-      padrao_tiss: lote.padrao_tiss,
-      cnes: lote.cnes,
-      hash_lote: lote.hash_lote
-    });
-
     // Buscar guias do lote
     const guias = await this.getGuiasByLote(loteId);
 
@@ -445,7 +429,6 @@ export class FinanceiroCompactModel {
       }))
     };
 
-    console.log('✅ Cabeçalho retornado para frontend:', dadosCompletos.cabecalho);
     return dadosCompletos;
   }
 
@@ -459,8 +442,6 @@ export class FinanceiroCompactModel {
   // ==================== ITEMS (GUIAS, PROCEDIMENTOS, DESPESAS) ====================
   
   static async createItem(item: ItemFinanceiroInput): Promise<number> {
-    console.log('🔧 Criando item com dados:', item);
-    
     try {
       // Usar todas as 58 colunas da tabela financeiro_items (58 valores, 58 ?)
       const values = [
@@ -522,9 +503,7 @@ export class FinanceiroCompactModel {
         item.executante_cbos || null,
         item.indicacao_acidente || null
       ];
-      
-      console.log('📊 Total de valores:', values.length);
-      
+
       const [result] = await pool.execute<ResultSetHeader>(
         `INSERT INTO financeiro_items (
           lote_id, clinica_id, competencia, tipo_item, numero_guia_prestador, numero_guia_operadora,
@@ -542,8 +521,7 @@ export class FinanceiroCompactModel {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         values
       );
-      
-      console.log('✅ Item criado com ID:', result.insertId);
+
       return result.insertId;
     } catch (error: any) {
       console.error('❌ Erro ao criar item:', error.message);
@@ -569,19 +547,12 @@ export class FinanceiroCompactModel {
 
   // Buscar guias por lote
   static async getGuiasByLote(loteId: number): Promise<ItemFinanceiro[]> {
-    console.log('🔧 Buscando guias para lote ID:', loteId);
-    
     try {
       // Primeiro, verificar se existem itens para este lote
       const [allItems] = await pool.execute<ItemFinanceiro[]>(
         'SELECT * FROM financeiro_items WHERE lote_id = ?',
         [loteId]
       );
-      console.log('📋 Total de itens no lote:', allItems.length);
-      console.log('📋 Total de itens retornados:', allItems.length);
-      console.log('  - Guias:', allItems.filter(i => i.tipo_item === 'guia').length);
-      console.log('  - Procedimentos:', allItems.filter(i => i.tipo_item === 'procedimento').length);
-      console.log('  - Despesas:', allItems.filter(i => i.tipo_item === 'despesa').length);
 
       return allItems;
     } catch (error) {
@@ -601,15 +572,11 @@ export class FinanceiroCompactModel {
 
   // Método de teste para verificar todos os itens de um lote
   static async getAllItemsByLote(loteId: number): Promise<ItemFinanceiro[]> {
-    console.log('🔧 Buscando TODOS os itens para lote ID:', loteId);
-    
     try {
       const [rows] = await pool.execute<ItemFinanceiro[]>(
         'SELECT * FROM financeiro_items WHERE lote_id = ? ORDER BY tipo_item, id',
         [loteId]
       );
-      console.log('📋 Todos os itens encontrados:', rows.length);
-      console.log('📋 Tipos de itens:', rows.map(item => item.tipo_item));
       return rows;
     } catch (error) {
       console.error('❌ Erro ao buscar todos os itens:', error);
@@ -637,8 +604,6 @@ export class FinanceiroCompactModel {
   // ==================== PROFISSIONAIS ====================
   
   static async createProfissional(profissional: ProfissionalFinanceiroInput): Promise<number> {
-    console.log('🔧 Criando profissional:', profissional);
-    
     const [result] = await pool.execute<ResultSetHeader>(
       `INSERT INTO financeiro_profissionais (
         lote_id, clinica_id, nome, conselho, numero_conselho, uf, cbos, cpf
@@ -668,8 +633,6 @@ export class FinanceiroCompactModel {
   // ==================== GUIA PROFISSIONAL ====================
   
   static async createGuiaProfissional(guiaProfissional: GuiaProfissionalFinanceiroInput): Promise<number> {
-    console.log('🔧 Criando guia profissional:', guiaProfissional);
-    
     const [result] = await pool.execute<ResultSetHeader>(
       `INSERT INTO financeiro_guia_profissional (
         lote_id, clinica_id, item_id, profissional_id, tipo_relacao, grau_participacao
@@ -775,261 +738,231 @@ export class FinanceiroCompactModel {
   
   // Processar XML TISS e criar estrutura completa
   static async processarXMLTISS(xmlData: any, clinicaId: number, operadoraId?: number): Promise<number> {
-    console.log('🔧 Processando XML TISS para clínica:', clinicaId);
-    console.log('🏢 Operadora ID fornecida:', operadoraId);
-    console.log('📋 Dados recebidos:', JSON.stringify(xmlData, null, 2));
-    
     try {
-    // Buscar dados da operadora se operadoraId foi fornecido
-    let operadoraData = {
-      registro_ans: xmlData.operadora?.registro_ans || null,
-      nome: xmlData.operadora?.nome || null
-    };
+      // Buscar dados da operadora se operadoraId foi fornecido
+      let operadoraData = {
+        registro_ans: xmlData.operadora?.registro_ans || null,
+        nome: xmlData.operadora?.nome || null
+      };
 
-    if (operadoraId) {
-      console.log('🔍 Buscando dados da operadora ID:', operadoraId);
-      const [operadoraRows] = await pool.execute<RowDataPacket[]>(
-        'SELECT registroANS as registro_ans, nome FROM operadoras WHERE id = ? AND status = ?',
-        [operadoraId, 'ativo']
-      );
-      
-      if (operadoraRows.length > 0) {
-        operadoraData = {
-          registro_ans: operadoraRows[0].registro_ans,
-          nome: operadoraRows[0].nome
-        };
-        console.log('✅ Dados da operadora encontrados:', operadoraData);
-      } else {
-        console.log('⚠️ Operadora não encontrada, usando dados do XML');
+      if (operadoraId) {
+        const [operadoraRows] = await pool.execute<RowDataPacket[]>(
+          'SELECT registroANS as registro_ans, nome FROM operadoras WHERE id = ? AND status = ?',
+          [operadoraId, 'ativo']
+        );
+
+        if (operadoraRows.length > 0) {
+          operadoraData = {
+            registro_ans: operadoraRows[0].registro_ans,
+            nome: operadoraRows[0].nome
+          };
+        } else {}
       }
-    }
 
-    // 1. Criar lote com validação de valores
-    const loteId = await this.createLote({
-      clinica_id: clinicaId,
-      operadora_registro_ans: operadoraData.registro_ans,
-      operadora_nome: operadoraData.nome,
-      numero_lote: xmlData.lote?.numero || null,
-      competencia: xmlData.lote?.competencia || null,
-      data_envio: xmlData.lote?.data_envio || null,
-      quantidade_guias: xmlData.guias?.length || 0,
-      valor_total: xmlData.lote?.valor_total || 0,
-      arquivo_xml: xmlData.nome_arquivo || null,
-      tipo_transacao: xmlData.cabecalho?.tipoTransacao || null,
-      sequencial_transacao: xmlData.cabecalho?.sequencialTransacao || null,
-      data_registro_transacao: xmlData.cabecalho?.dataRegistroTransacao || null,
-      hora_registro_transacao: xmlData.cabecalho?.horaRegistroTransacao || null,
-      cnpj_prestador: xmlData.cabecalho?.cnpjPrestador || null,
-      nome_prestador: xmlData.cabecalho?.nomePrestador || null,
-      registro_ans: xmlData.cabecalho?.registroANS || null,
-      padrao_tiss: xmlData.cabecalho?.padrao || null,
-      hash_lote: xmlData.cabecalho?.hash || null,
-      cnes: xmlData.cabecalho?.cnes || null,
-      status: 'pendente'
-    });
+      // 1. Criar lote com validação de valores
+      const loteId = await this.createLote({
+        clinica_id: clinicaId,
+        operadora_registro_ans: operadoraData.registro_ans,
+        operadora_nome: operadoraData.nome,
+        numero_lote: xmlData.lote?.numero || null,
+        competencia: xmlData.lote?.competencia || null,
+        data_envio: xmlData.lote?.data_envio || null,
+        quantidade_guias: xmlData.guias?.length || 0,
+        valor_total: xmlData.lote?.valor_total || 0,
+        arquivo_xml: xmlData.nome_arquivo || null,
+        tipo_transacao: xmlData.cabecalho?.tipoTransacao || null,
+        sequencial_transacao: xmlData.cabecalho?.sequencialTransacao || null,
+        data_registro_transacao: xmlData.cabecalho?.dataRegistroTransacao || null,
+        hora_registro_transacao: xmlData.cabecalho?.horaRegistroTransacao || null,
+        cnpj_prestador: xmlData.cabecalho?.cnpjPrestador || null,
+        nome_prestador: xmlData.cabecalho?.nomePrestador || null,
+        registro_ans: xmlData.cabecalho?.registroANS || null,
+        padrao_tiss: xmlData.cabecalho?.padrao || null,
+        hash_lote: xmlData.cabecalho?.hash || null,
+        cnes: xmlData.cabecalho?.cnes || null,
+        status: 'pendente'
+      });
 
-    console.log('✅ Lote criado com ID:', loteId);
+      // 2. Criar guias e seus itens
+      if (xmlData.guias && Array.isArray(xmlData.guias)) {
+        for (const guiaData of xmlData.guias) {
+          // Criar guia principal
+          const guiaId = await this.createGuia({
+            lote_id: loteId,
+            clinica_id: clinicaId,
+            competencia: xmlData.lote?.competencia || null,
+            numero_guia_prestador: guiaData.numero_guia_prestador || null,
+            numero_guia_operadora: guiaData.numero_guia_operadora || null,
+            numero_carteira: guiaData.numero_carteira || null,
+            data_autorizacao: guiaData.data_autorizacao || null,
+            data_execucao: guiaData.data_execucao || null,
+            codigo_item: 'GUIA', // Identificador para a guia principal
+            descricao_item: `Guia ${guiaData.numero_guia_prestador}`,
+            quantidade_executada: 1,
+            valor_unitario: guiaData.valor_total || 0,
+            valor_total: guiaData.valor_total || 0,
+            status_pagamento: 'pendente',
+            // Dados do profissional
+            profissional_nome: guiaData.profissional_solicitante?.nome || null,
+            profissional_conselho: guiaData.profissional_solicitante?.conselho || null,
+            profissional_numero_conselho: guiaData.profissional_solicitante?.numero_conselho || null,
+            profissional_uf: guiaData.profissional_solicitante?.uf || null,
+            profissional_cbos: guiaData.profissional_solicitante?.cbos || null,
+            // Dados clínicos
+            indicacao_clinica: guiaData.indicacao_clinica || null,
+            tipo_atendimento: guiaData.tipo_atendimento || null,
+            carater_atendimento: guiaData.carater_atendimento || null,
+            regime_atendimento: guiaData.regime_atendimento || null,
+            // Dados do prestador
+            cnes: guiaData.cnes || null,
+            cnpj_prestador: guiaData.cnpj_prestador || null,
+            // Dados adicionais
+            senha: guiaData.senha || null,
+            data_validade_senha: guiaData.data_validade_senha || null,
+            data_solicitacao: guiaData.data_solicitacao || null,
+            // Valores por categoria
+            valor_procedimentos: guiaData.valor_procedimentos || 0,
+            valor_medicamentos: guiaData.valor_medicamentos || 0,
+            valor_materiais: guiaData.valor_materiais || 0,
+            valor_taxas_alugueis: guiaData.valor_taxas || 0
+          });
 
-    // 2. Criar guias e seus itens
-    if (xmlData.guias && Array.isArray(xmlData.guias)) {
-      console.log(`📋 Processando ${xmlData.guias.length} guias...`);
-      
-      for (const guiaData of xmlData.guias) {
-        console.log('🔧 Processando guia:', guiaData.numero_guia_prestador);
-        console.log('📋 Dados da guia:', JSON.stringify(guiaData, null, 2));
-        
-        // Criar guia principal
-        const guiaId = await this.createGuia({
-          lote_id: loteId,
-          clinica_id: clinicaId,
-          competencia: xmlData.lote?.competencia || null,
-          numero_guia_prestador: guiaData.numero_guia_prestador || null,
-          numero_guia_operadora: guiaData.numero_guia_operadora || null,
-          numero_carteira: guiaData.numero_carteira || null,
-          data_autorizacao: guiaData.data_autorizacao || null,
-          data_execucao: guiaData.data_execucao || null,
-          codigo_item: 'GUIA', // Identificador para a guia principal
-          descricao_item: `Guia ${guiaData.numero_guia_prestador}`,
-          quantidade_executada: 1,
-          valor_unitario: guiaData.valor_total || 0,
-          valor_total: guiaData.valor_total || 0,
-          status_pagamento: 'pendente',
-          // Dados do profissional
-          profissional_nome: guiaData.profissional_solicitante?.nome || null,
-          profissional_conselho: guiaData.profissional_solicitante?.conselho || null,
-          profissional_numero_conselho: guiaData.profissional_solicitante?.numero_conselho || null,
-          profissional_uf: guiaData.profissional_solicitante?.uf || null,
-          profissional_cbos: guiaData.profissional_solicitante?.cbos || null,
-          // Dados clínicos
-          indicacao_clinica: guiaData.indicacao_clinica || null,
-          tipo_atendimento: guiaData.tipo_atendimento || null,
-          carater_atendimento: guiaData.carater_atendimento || null,
-          regime_atendimento: guiaData.regime_atendimento || null,
-          // Dados do prestador
-          cnes: guiaData.cnes || null,
-          cnpj_prestador: guiaData.cnpj_prestador || null,
-          // Dados adicionais
-          senha: guiaData.senha || null,
-          data_validade_senha: guiaData.data_validade_senha || null,
-          data_solicitacao: guiaData.data_solicitacao || null,
-          // Valores por categoria
-          valor_procedimentos: guiaData.valor_procedimentos || 0,
-          valor_medicamentos: guiaData.valor_medicamentos || 0,
-          valor_materiais: guiaData.valor_materiais || 0,
-          valor_taxas_alugueis: guiaData.valor_taxas || 0
-        });
+          // Os dados do profissional solicitante já estão salvos na guia
+          // (profissional_nome, profissional_conselho, etc.)
 
-        console.log('✅ Guia criada com ID:', guiaId);
-
-        // Os dados do profissional solicitante já estão salvos na guia
-        // (profissional_nome, profissional_conselho, etc.)
-
-        // Criar procedimentos executados
-        if (guiaData.procedimentos && Array.isArray(guiaData.procedimentos)) {
-          console.log(`📋 Processando ${guiaData.procedimentos.length} procedimentos para guia ${guiaData.numero_guia_prestador}`);
-          for (const procedimento of guiaData.procedimentos) {
-            const procedimentoId = await this.createProcedimento({
-              lote_id: loteId,
-              clinica_id: clinicaId,
-              competencia: xmlData.lote?.competencia || null,
-              parent_id: guiaId,
-              numero_guia_prestador: guiaData.numero_guia_prestador,
-              numero_guia_operadora: guiaData.numero_guia_operadora,
-              numero_carteira: guiaData.numero_carteira,
-              data_autorizacao: guiaData.data_autorizacao,
-              data_execucao: procedimento.data_execucao || null,
-              codigo_item: procedimento.codigo_procedimento || null,
-              descricao_item: procedimento.descricao_procedimento || null,
-              quantidade_executada: procedimento.quantidade_executada || 1,
-              valor_unitario: procedimento.valor_unitario || 0,
-              valor_total: procedimento.valor_total || 0,
-              status_pagamento: 'pendente',
-              // Campos adicionais importantes
-              codigo_tabela: procedimento.codigo_tabela || null,
-              sequencial_item: procedimento.sequencial_item || null,
-              hora_inicial: procedimento.hora_inicial || null,
-              hora_final: procedimento.hora_final || null,
-              via_acesso: procedimento.via_acesso || null,
-              reducao_acrescimo: procedimento.reducao_acrescimo || 1.0,
-              unidade_medida: procedimento.unidade_medida || null,
-              // Dados da equipe executante
-              grau_participacao: procedimento.equipe?.grau_participacao || null,
-              executante_cpf: procedimento.equipe?.cpf_profissional || null,
-              executante_nome: procedimento.equipe?.nome_profissional || null,
-              executante_conselho: procedimento.equipe?.conselho || null,
-              executante_numero_conselho: procedimento.equipe?.numero_conselho || null,
-              executante_uf: procedimento.equipe?.uf || null,
-              executante_cbos: procedimento.equipe?.cbos || null
-            });
-            console.log(`✅ Procedimento ${procedimento.codigo_procedimento} criado com ID: ${procedimentoId}`);
-
-            // Os dados da equipe executante já estão salvos no procedimento
-            // (executante_nome, executante_cpf, executante_conselho, etc.)
+          // Criar procedimentos executados
+          if (guiaData.procedimentos && Array.isArray(guiaData.procedimentos)) {
+            for (const procedimento of guiaData.procedimentos) {
+              const procedimentoId = await this.createProcedimento({
+                lote_id: loteId,
+                clinica_id: clinicaId,
+                competencia: xmlData.lote?.competencia || null,
+                parent_id: guiaId,
+                numero_guia_prestador: guiaData.numero_guia_prestador,
+                numero_guia_operadora: guiaData.numero_guia_operadora,
+                numero_carteira: guiaData.numero_carteira,
+                data_autorizacao: guiaData.data_autorizacao,
+                data_execucao: procedimento.data_execucao || null,
+                codigo_item: procedimento.codigo_procedimento || null,
+                descricao_item: procedimento.descricao_procedimento || null,
+                quantidade_executada: procedimento.quantidade_executada || 1,
+                valor_unitario: procedimento.valor_unitario || 0,
+                valor_total: procedimento.valor_total || 0,
+                status_pagamento: 'pendente',
+                // Campos adicionais importantes
+                codigo_tabela: procedimento.codigo_tabela || null,
+                sequencial_item: procedimento.sequencial_item || null,
+                hora_inicial: procedimento.hora_inicial || null,
+                hora_final: procedimento.hora_final || null,
+                via_acesso: procedimento.via_acesso || null,
+                reducao_acrescimo: procedimento.reducao_acrescimo || 1.0,
+                unidade_medida: procedimento.unidade_medida || null,
+                // Dados da equipe executante
+                grau_participacao: procedimento.equipe?.grau_participacao || null,
+                executante_cpf: procedimento.equipe?.cpf_profissional || null,
+                executante_nome: procedimento.equipe?.nome_profissional || null,
+                executante_conselho: procedimento.equipe?.conselho || null,
+                executante_numero_conselho: procedimento.equipe?.numero_conselho || null,
+                executante_uf: procedimento.equipe?.uf || null,
+                executante_cbos: procedimento.equipe?.cbos || null
+              });
+            }
           }
-        }
 
-        // Criar despesas (medicamentos, materiais, taxas)
-        if (guiaData.medicamentos && Array.isArray(guiaData.medicamentos)) {
-          console.log(`📋 Processando ${guiaData.medicamentos.length} medicamentos para guia ${guiaData.numero_guia_prestador}`);
-          for (const medicamento of guiaData.medicamentos) {
-            const medicamentoId = await this.createDespesa({
-              lote_id: loteId,
-              clinica_id: clinicaId,
-              competencia: xmlData.lote?.competencia || null,
-              parent_id: guiaId,
-              numero_guia_prestador: guiaData.numero_guia_prestador,
-              numero_guia_operadora: guiaData.numero_guia_operadora,
-              numero_carteira: guiaData.numero_carteira,
-              data_autorizacao: guiaData.data_autorizacao,
-              data_execucao: medicamento.data_execucao || null,
-              codigo_item: medicamento.codigo_medicamento || null,
-              descricao_item: medicamento.descricao || 'Medicamentos',
-              quantidade_executada: medicamento.quantidade_executada || 1,
-              valor_unitario: medicamento.valor_unitario || 0,
-              valor_total: medicamento.valor_total || 0,
-              status_pagamento: 'pendente',
-              // Campos adicionais de despesas
-              codigo_despesa: medicamento.codigo_despesa || '02', // 02 = Medicamento
-              codigo_tabela: medicamento.codigo_tabela || null,
-              sequencial_item: medicamento.sequencial_item || null,
-              hora_inicial: medicamento.hora_inicial || null,
-              hora_final: medicamento.hora_final || null,
-              unidade_medida: medicamento.unidade_medida || null,
-              reducao_acrescimo: medicamento.reducao_acrescimo || 1.0
-            });
-            console.log(`✅ Medicamento ${medicamento.codigo_medicamento} criado com ID: ${medicamentoId}`);
+          // Criar despesas (medicamentos, materiais, taxas)
+          if (guiaData.medicamentos && Array.isArray(guiaData.medicamentos)) {
+            for (const medicamento of guiaData.medicamentos) {
+              const medicamentoId = await this.createDespesa({
+                lote_id: loteId,
+                clinica_id: clinicaId,
+                competencia: xmlData.lote?.competencia || null,
+                parent_id: guiaId,
+                numero_guia_prestador: guiaData.numero_guia_prestador,
+                numero_guia_operadora: guiaData.numero_guia_operadora,
+                numero_carteira: guiaData.numero_carteira,
+                data_autorizacao: guiaData.data_autorizacao,
+                data_execucao: medicamento.data_execucao || null,
+                codigo_item: medicamento.codigo_medicamento || null,
+                descricao_item: medicamento.descricao || 'Medicamentos',
+                quantidade_executada: medicamento.quantidade_executada || 1,
+                valor_unitario: medicamento.valor_unitario || 0,
+                valor_total: medicamento.valor_total || 0,
+                status_pagamento: 'pendente',
+                // Campos adicionais de despesas
+                codigo_despesa: medicamento.codigo_despesa || '02', // 02 = Medicamento
+                codigo_tabela: medicamento.codigo_tabela || null,
+                sequencial_item: medicamento.sequencial_item || null,
+                hora_inicial: medicamento.hora_inicial || null,
+                hora_final: medicamento.hora_final || null,
+                unidade_medida: medicamento.unidade_medida || null,
+                reducao_acrescimo: medicamento.reducao_acrescimo || 1.0
+              });
+            }
           }
-        }
 
-        if (guiaData.materiais && Array.isArray(guiaData.materiais)) {
-          console.log(`📋 Processando ${guiaData.materiais.length} materiais para guia ${guiaData.numero_guia_prestador}`);
-          for (const material of guiaData.materiais) {
-            const materialId = await this.createDespesa({
-              lote_id: loteId,
-              clinica_id: clinicaId,
-              competencia: xmlData.lote?.competencia || null,
-              parent_id: guiaId,
-              numero_guia_prestador: guiaData.numero_guia_prestador,
-              numero_guia_operadora: guiaData.numero_guia_operadora,
-              numero_carteira: guiaData.numero_carteira,
-              data_autorizacao: guiaData.data_autorizacao,
-              data_execucao: material.data_execucao || null,
-              codigo_item: material.codigo_material || null,
-              descricao_item: material.descricao || 'Materiais',
-              quantidade_executada: material.quantidade_executada || 1,
-              valor_unitario: material.valor_unitario || 0,
-              valor_total: material.valor_total || 0,
-              status_pagamento: 'pendente',
-              // Campos adicionais de despesas
-              codigo_despesa: material.codigo_despesa || '03', // 03 = Material
-              codigo_tabela: material.codigo_tabela || null,
-              sequencial_item: material.sequencial_item || null,
-              hora_inicial: material.hora_inicial || null,
-              hora_final: material.hora_final || null,
-              unidade_medida: material.unidade_medida || null,
-              reducao_acrescimo: material.reducao_acrescimo || 1.0
-            });
-            console.log(`✅ Material ${material.codigo_material} criado com ID: ${materialId}`);
+          if (guiaData.materiais && Array.isArray(guiaData.materiais)) {
+            for (const material of guiaData.materiais) {
+              const materialId = await this.createDespesa({
+                lote_id: loteId,
+                clinica_id: clinicaId,
+                competencia: xmlData.lote?.competencia || null,
+                parent_id: guiaId,
+                numero_guia_prestador: guiaData.numero_guia_prestador,
+                numero_guia_operadora: guiaData.numero_guia_operadora,
+                numero_carteira: guiaData.numero_carteira,
+                data_autorizacao: guiaData.data_autorizacao,
+                data_execucao: material.data_execucao || null,
+                codigo_item: material.codigo_material || null,
+                descricao_item: material.descricao || 'Materiais',
+                quantidade_executada: material.quantidade_executada || 1,
+                valor_unitario: material.valor_unitario || 0,
+                valor_total: material.valor_total || 0,
+                status_pagamento: 'pendente',
+                // Campos adicionais de despesas
+                codigo_despesa: material.codigo_despesa || '03', // 03 = Material
+                codigo_tabela: material.codigo_tabela || null,
+                sequencial_item: material.sequencial_item || null,
+                hora_inicial: material.hora_inicial || null,
+                hora_final: material.hora_final || null,
+                unidade_medida: material.unidade_medida || null,
+                reducao_acrescimo: material.reducao_acrescimo || 1.0
+              });
+            }
           }
-        }
 
-        if (guiaData.taxas && Array.isArray(guiaData.taxas)) {
-          console.log(`📋 Processando ${guiaData.taxas.length} taxas para guia ${guiaData.numero_guia_prestador}`);
-          for (const taxa of guiaData.taxas) {
-            const taxaId = await this.createDespesa({
-              lote_id: loteId,
-              clinica_id: clinicaId,
-              competencia: xmlData.lote?.competencia || null,
-              parent_id: guiaId,
-              numero_guia_prestador: guiaData.numero_guia_prestador,
-              numero_guia_operadora: guiaData.numero_guia_operadora,
-              numero_carteira: guiaData.numero_carteira,
-              data_autorizacao: guiaData.data_autorizacao,
-              data_execucao: taxa.data_execucao || null,
-              codigo_item: taxa.codigo_taxa || null,
-              descricao_item: taxa.descricao || 'Taxas',
-              quantidade_executada: taxa.quantidade_executada || 1,
-              valor_unitario: taxa.valor_unitario || 0,
-              valor_total: taxa.valor_total || 0,
-              status_pagamento: 'pendente',
-              // Campos adicionais de despesas
-              codigo_despesa: taxa.codigo_despesa || '07', // 07 = Taxa/Aluguel
-              codigo_tabela: taxa.codigo_tabela || null,
-              sequencial_item: taxa.sequencial_item || null,
-              hora_inicial: taxa.hora_inicial || null,
-              hora_final: taxa.hora_final || null,
-              unidade_medida: taxa.unidade_medida || null,
-              reducao_acrescimo: taxa.reducao_acrescimo || 1.0
-            });
-            console.log(`✅ Taxa ${taxa.codigo_taxa} criada com ID: ${taxaId}`);
+          if (guiaData.taxas && Array.isArray(guiaData.taxas)) {
+            for (const taxa of guiaData.taxas) {
+              const taxaId = await this.createDespesa({
+                lote_id: loteId,
+                clinica_id: clinicaId,
+                competencia: xmlData.lote?.competencia || null,
+                parent_id: guiaId,
+                numero_guia_prestador: guiaData.numero_guia_prestador,
+                numero_guia_operadora: guiaData.numero_guia_operadora,
+                numero_carteira: guiaData.numero_carteira,
+                data_autorizacao: guiaData.data_autorizacao,
+                data_execucao: taxa.data_execucao || null,
+                codigo_item: taxa.codigo_taxa || null,
+                descricao_item: taxa.descricao || 'Taxas',
+                quantidade_executada: taxa.quantidade_executada || 1,
+                valor_unitario: taxa.valor_unitario || 0,
+                valor_total: taxa.valor_total || 0,
+                status_pagamento: 'pendente',
+                // Campos adicionais de despesas
+                codigo_despesa: taxa.codigo_despesa || '07', // 07 = Taxa/Aluguel
+                codigo_tabela: taxa.codigo_tabela || null,
+                sequencial_item: taxa.sequencial_item || null,
+                hora_inicial: taxa.hora_inicial || null,
+                hora_final: taxa.hora_final || null,
+                unidade_medida: taxa.unidade_medida || null,
+                reducao_acrescimo: taxa.reducao_acrescimo || 1.0
+              });
+            }
           }
         }
       }
-    }
 
-    console.log('✅ Processamento XML TISS concluído');
-    return loteId;
-    
+      return loteId;
     } catch (error) {
       console.error('❌ Erro no processarXMLTISS:', error);
       throw error;

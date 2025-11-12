@@ -58,50 +58,44 @@ export class ChatOnkhosModel {
         WHERE c.operadora_id = ? AND c.clinica_id = ? AND c.ativa = TRUE
         LIMIT 1
       `;
-      
+
       const existing = await query(existingQuery, [operadoraId, clinicaId]);
-      
+
       if (existing.length > 0) {
-        console.log('✅ Conversa existente encontrada:', existing[0].id);
         return existing[0];
       }
-      
-      // Se não existe, criar nova conversa
-      console.log('🔧 Criando nova conversa entre operadora e clínica...');
-      
+
       // Buscar nomes para a conversa
       const [operadoraResult, clinicaResult] = await Promise.all([
         query('SELECT nome FROM operadoras WHERE id = ?', [operadoraId]),
         query('SELECT nome FROM clinicas WHERE id = ?', [clinicaId])
       ]);
-      
+
       const operadoraNome = operadoraResult[0]?.nome || 'Operadora';
       const clinicaNome = clinicaResult[0]?.nome || 'Clínica';
-      
+
       const insertQuery = `
         INSERT INTO conversas (
           operadora_id, clinica_id, nome_conversa, descricao, ativa, created_at, updated_at
         ) VALUES (?, ?, ?, ?, TRUE, CONVERT_TZ(NOW(), '+00:00', '-03:00'), CONVERT_TZ(NOW(), '+00:00', '-03:00'))
       `;
-      
+
       const values = [
         operadoraId,
         clinicaId,
         `${operadoraNome} - ${clinicaNome}`,
         `Chat entre ${operadoraNome} e ${clinicaNome}`
       ];
-      
+
       const result = await query(insertQuery, values);
       const conversaId = result.insertId;
-      
-      console.log('✅ Conversa criada com ID:', conversaId);
-      
+
       // Buscar a conversa recém-criada
       const newConversa = await this.getConversaById(conversaId);
       if (!newConversa) {
         throw new Error('Erro ao buscar conversa recém-criada');
       }
-      
+
       return newConversa;
     } catch (error) {
       console.error('Erro ao buscar/criar conversa:', error);
@@ -255,7 +249,7 @@ export class ChatOnkhosModel {
           conteudo, tipo_mensagem, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, CONVERT_TZ(NOW(), '+00:00', '-03:00'), CONVERT_TZ(NOW(), '+00:00', '-03:00'))
       `;
-      
+
       const values = [
         mensagemData.conversa_id,
         mensagemData.remetente_id,
@@ -264,22 +258,16 @@ export class ChatOnkhosModel {
         mensagemData.conteudo,
         mensagemData.tipo_mensagem || 'texto'
       ];
-      
-      console.log('🔧 [MODELO] Criando nova mensagem...', mensagemData);
-      console.log('🔧 [MODELO] Query:', insertQuery);
-      console.log('🔧 [MODELO] Valores:', values);
-      
+
       const result = await query(insertQuery, values);
       const mensagemId = result.insertId;
-      
-      console.log('✅ Mensagem criada com ID:', mensagemId);
-      
+
       // Buscar a mensagem recém-criada
       const newMensagem = await this.getMensagemById(mensagemId);
       if (!newMensagem) {
         throw new Error('Erro ao buscar mensagem recém-criada');
       }
-      
+
       return newMensagem;
     } catch (error) {
       console.error('Erro ao criar mensagem:', error);
@@ -313,9 +301,8 @@ export class ChatOnkhosModel {
             updated_at = CONVERT_TZ(NOW(), '+00:00', '-03:00')
         WHERE id = ?
       `;
-      
+
       await query(updateQuery, [mensagemId, conteudo, conversaId]);
-      console.log('✅ Última mensagem atualizada para conversa:', conversaId);
     } catch (error) {
       console.error('Erro ao atualizar última mensagem:', error);
     }
@@ -330,14 +317,13 @@ export class ChatOnkhosModel {
         WHERE operadora_id = ? AND clinica_id = ? AND ativa = 1
         LIMIT 1
       `;
-      
+
       const existing = await query(existingQuery, [operadoraId, clinicaId]);
-      
+
       if (existing.length > 0) {
-        console.log('✅ Conversa existente encontrada:', existing[0].id);
         return existing[0];
       }
-      
+
       // Se não existe, criar nova conversa
       const insertQuery = `
         INSERT INTO conversas (
@@ -347,20 +333,19 @@ export class ChatOnkhosModel {
           created_at, updated_at
         ) VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, 1, CONVERT_TZ(NOW(), '+00:00', '-03:00'), CONVERT_TZ(NOW(), '+00:00', '-03:00'))
       `;
-      
+
       const nomeConversa = `Conversa Operadora-Clínica ${operadoraId}-${clinicaId}`;
       const descricao = `Chat entre operadora ID ${operadoraId} e clínica ID ${clinicaId}`;
-      
+
       const result = await query(insertQuery, [operadoraId, clinicaId, nomeConversa, descricao]);
       const conversaId = result.insertId;
-      
+
       // Buscar a conversa recém-criada
       const newConversa = await this.getConversaById(conversaId);
       if (!newConversa) {
         throw new Error('Erro ao buscar conversa recém-criada');
       }
-      
-      console.log('✅ Nova conversa criada:', conversaId);
+
       return newConversa;
     } catch (error) {
       console.error('Erro ao encontrar/criar conversa:', error);

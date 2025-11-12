@@ -7,14 +7,6 @@ export class SolicitacaoAutorizacaoModel {
   
   // Criar nova solicitação
   static async create(dadosSolicitacao: SolicitacaoCreateInput): Promise<SolicitacaoAutorizacao> {
-    console.log('🔧 Criando nova solicitação de autorização...');
-    console.log('📋 Dados recebidos no modelo:', {
-      paciente_id: dadosSolicitacao.paciente_id,
-      tipo_paciente_id: typeof dadosSolicitacao.paciente_id,
-      clinica_id: dadosSolicitacao.clinica_id,
-      cliente_nome: dadosSolicitacao.cliente_nome
-    });
-    
     const insertQuery = `
       INSERT INTO solicitacoes (
         clinica_id, paciente_id, hospital_nome, hospital_codigo,
@@ -26,7 +18,7 @@ export class SolicitacaoAutorizacaoModel {
         medicamentos, medico_assinatura_crm, numero_autorizacao, observacoes, status
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
-    
+
     // Preparar dados do cliente como JSON
     const clienteDados = {
       nome: dadosSolicitacao.cliente_nome,
@@ -88,15 +80,10 @@ export class SolicitacaoAutorizacaoModel {
       dadosSolicitacao.observacoes || null,
       'pendente' // status padrão
     ];
-    
+
     try {
-      console.log('🔧 Executando query de inserção...');
-      console.log('📋 Valores a serem inseridos:', values);
-      
       const result = await query(insertQuery, values);
       const insertId = result.insertId;
-      
-      console.log('✅ Solicitação criada com ID:', insertId);
 
       // Notificação: nova solicitação criada
       try {
@@ -112,13 +99,13 @@ export class SolicitacaoAutorizacaoModel {
       } catch (e) {
         console.warn('⚠️ Falha ao criar notificação auth_created:', (e as any)?.message || e);
       }
-      
+
       // Buscar a solicitação recém-criada
       const novaSolicitacao = await this.findById(insertId);
       if (!novaSolicitacao) {
         throw new Error('Erro ao buscar solicitação recém-criada');
       }
-      
+
       return novaSolicitacao;
     } catch (error) {
       console.error('❌ Erro ao criar solicitação:', error);
@@ -185,21 +172,15 @@ export class SolicitacaoAutorizacaoModel {
     `;
     
     try {
-      console.log('🔧 Executando queries da clínica...');
-      console.log('Query de busca:', selectQuery);
-      console.log('Parâmetros:', [clinicaId]);
-      
       // Executar contagem
       const countResult = await query(countQuery, [clinicaId]);
-      
+
       // ✅ CORREÇÃO: Executar busca apenas com clinicaId como parâmetro
       const solicitacoes = await query(selectQuery, [clinicaId]);
-      
+
       const total = countResult[0]?.total || 0;
       const totalPages = Math.ceil(total / safeLimit);
-      
-      console.log(`✅ Sucesso! ${solicitacoes.length} solicitações encontradas de um total de ${total}`);
-      
+
       return {
         data: solicitacoes,
         pagination: {
@@ -251,21 +232,15 @@ export class SolicitacaoAutorizacaoModel {
     `;
     
     try {
-      console.log('🔧 Buscando solicitações da operadora...');
-      console.log('Query de busca:', selectQuery);
-      console.log('Parâmetros:', [operadoraId]);
-      
       // Executar contagem
       const countResult = await query(countQuery, [operadoraId]);
-      
+
       // Executar busca
       const solicitacoes = await query(selectQuery, [operadoraId]);
-      
+
       const total = countResult[0]?.total || 0;
       const totalPages = Math.ceil(total / safeLimit);
-      
-      console.log(`✅ Sucesso! ${solicitacoes.length} solicitações encontradas para operadora ${operadoraId} (total: ${total})`);
-      
+
       return {
         data: solicitacoes,
         pagination: {
@@ -314,19 +289,15 @@ export class SolicitacaoAutorizacaoModel {
     `;
     
     try {
-      console.log('🔧 Executando queries gerais...');
-      
       // Executar contagem
       const countResult = await query(countQuery, []);
-      
+
       // Executar busca
       const solicitacoes = await query(selectQuery, []);
-      
+
       const total = countResult[0]?.total || 0;
       const totalPages = Math.ceil(total / safeLimit);
-      
-      console.log(`✅ Sucesso! ${solicitacoes.length} solicitações encontradas de um total de ${total}`);
-      
+
       return {
         data: solicitacoes,
         pagination: {

@@ -24,15 +24,7 @@ const formatMedicamentosManuais = (medicamentosString) => {
   }
 };
 
-// Teste da formatação
-console.log('🧪 Testando formatação de medicamentos manuais...\n');
-
 const medicamentosTeste = "Teste 01 100mg VO D1,D7,D12,D15,D21,D25,D28,D30,D32,D69 2x; Teste 01 200mg IM D8-D20 3x";
-
-console.log('📋 Medicamentos originais:');
-console.log(medicamentosTeste);
-console.log('\n📋 Medicamentos formatados:');
-console.log(formatMedicamentosManuais(medicamentosTeste));
 
 // Simular dados de uma solicitação com protocolo
 const solicitacaoComProtocolo = {
@@ -159,45 +151,21 @@ const solicitacaoSemProtocolo = {
   observacoes: ""
 };
 
-// Teste com medicamentos manuais
-console.log('\n🧪 Testando com solicitação sem protocolo (método manual)...');
-console.log('📋 Medicamentos originais:');
-console.log(solicitacaoSemProtocolo.medicamentos_antineoplasticos);
-console.log('\n📋 Medicamentos formatados:');
-console.log(formatMedicamentosManuais(solicitacaoSemProtocolo.medicamentos_antineoplasticos));
-
-console.log('\n✅ Teste de formatação concluído!');
-
 async function testPDFGeneration() {
   try {
-    console.log('🧪 Testando geração de PDF com dados de protocolo...');
-    
     // Importar a função de geração de PDF
     const { generateAuthorizationPDF } = require('./src/utils/pdfGenerator.ts');
-    
-    // Teste 1: PDF com protocolo
-    console.log('\n📋 Teste 1: Gerando PDF com dados estruturados do protocolo...');
+
     const pdfBufferComProtocolo = await generateAuthorizationPDF(solicitacaoComProtocolo);
-    
+
     // Salvar PDF com protocolo
     const outputPathComProtocolo = path.join(__dirname, 'test-pdf-com-protocolo.pdf');
     fs.writeFileSync(outputPathComProtocolo, pdfBufferComProtocolo);
-    console.log(`✅ PDF com protocolo salvo em: ${outputPathComProtocolo}`);
-    console.log(`📊 Tamanho: ${(pdfBufferComProtocolo.length / 1024).toFixed(2)} KB`);
-    
-    // Teste 2: PDF sem protocolo (método antigo)
-    console.log('\n📋 Teste 2: Gerando PDF com dados manuais (método antigo)...');
     const pdfBufferSemProtocolo = await generateAuthorizationPDF(solicitacaoSemProtocolo);
-    
+
     // Salvar PDF sem protocolo
     const outputPathSemProtocolo = path.join(__dirname, 'test-pdf-sem-protocolo.pdf');
     fs.writeFileSync(outputPathSemProtocolo, pdfBufferSemProtocolo);
-    console.log(`✅ PDF sem protocolo salvo em: ${outputPathSemProtocolo}`);
-    console.log(`📊 Tamanho: ${(pdfBufferSemProtocolo.length / 1024).toFixed(2)} KB`);
-    
-    console.log('\n🎉 Testes concluídos com sucesso!');
-    console.log('📁 Verifique os arquivos PDF gerados para comparar os formatos.');
-    
   } catch (error) {
     console.error('❌ Erro durante o teste:', error);
   }

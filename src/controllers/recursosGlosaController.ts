@@ -73,18 +73,6 @@ class RecursosGlosaController {
         }
       }
 
-      // Log para debug
-      console.log('📥 Dados recebidos no backend:', {
-        guia_id,
-        lote_id,
-        clinica_id,
-        justificativa: justificativa ? justificativa.substring(0, 50) + '...' : null,
-        motivos_glosa,
-        itens_glosados_count: itensGlosadosArray.length,
-        files_count: files ? files.length : 0,
-        body_keys: Object.keys(req.body)
-      });
-
       // Validações
       if (!guia_id || !lote_id || !clinica_id || !justificativa) {
         console.error('❌ Campos obrigatórios ausentes:', {
@@ -105,16 +93,11 @@ class RecursosGlosaController {
         });
       }
 
-      // Log detalhado do lote_id
-      console.log('🔍 Tentando buscar lote com ID:', lote_id, 'tipo:', typeof lote_id);
-
       // Buscar operadora_registro_ans do lote
       const [lotes] = await connection.execute<RowDataPacket[]>(
         'SELECT id, numero_lote, operadora_registro_ans FROM financeiro_lotes WHERE id = ?',
         [lote_id]
       );
-
-      console.log('📦 Lotes encontrados:', lotes.length, lotes);
 
       if (!lotes || lotes.length === 0) {
         // Log de todos os lotes disponíveis
@@ -142,7 +125,7 @@ class RecursosGlosaController {
 
       // Calcular valor_guia
       let valor_guia = 0;
-      
+
       if (itensGlosadosArray.length > 0) {
         // Se há itens específicos glosados, usar a soma deles
         valor_guia = itensGlosadosArray.reduce((sum: number, item: any) => {
@@ -211,14 +194,6 @@ class RecursosGlosaController {
             ]
           );
 
-          // Atualizar o status do item específico no financeiro_items
-          // Procurar o item no banco pelo codigo_item e guia_id
-          console.log('🔍 Buscando item para atualizar status:', {
-            parent_id: guia_id,
-            codigo_item: item.codigo,
-            item_completo: item
-          });
-
           const [itemsBanco] = await connection.execute<RowDataPacket[]>(
             `SELECT id, codigo_item, descricao_item, tipo_item, status_pagamento 
              FROM financeiro_items 
@@ -229,8 +204,6 @@ class RecursosGlosaController {
             [guia_id, item.codigo || '']
           );
 
-          console.log('📦 Items encontrados no banco:', itemsBanco);
-
           if (itemsBanco.length > 0) {
             await connection.execute(
               `UPDATE financeiro_items 
@@ -238,14 +211,12 @@ class RecursosGlosaController {
                WHERE id = ?`,
               [itemsBanco[0].id]
             );
-            console.log(`✅ Item ${itemsBanco[0].id} (${itemsBanco[0].codigo_item}) marcado como glosado (antes: ${itemsBanco[0].status_pagamento})`);
-            
+
             // Verificar se foi atualizado
             const [verificacao] = await connection.execute<RowDataPacket[]>(
               'SELECT status_pagamento FROM financeiro_items WHERE id = ?',
               [itemsBanco[0].id]
             );
-            console.log(`✔️ Verificação após UPDATE - status_pagamento: ${verificacao[0]?.status_pagamento}`);
           } else {
             console.warn(`⚠️ Nenhum item encontrado no banco com parent_id=${guia_id} e codigo_item=${item.codigo}`);
           }
@@ -308,14 +279,11 @@ class RecursosGlosaController {
         itens_glosados: itensGlosados
       };
 
-      console.log('✅ Recurso criado com sucesso:', recursoId);
-
       res.json({
         success: true,
         message: 'Recurso de glosa criado com sucesso',
         data: recursoRetorno
       });
-
     } catch (error: any) {
       await connection.rollback();
       console.error('Erro ao criar recurso de glosa:', error);
@@ -568,8 +536,6 @@ class RecursosGlosaController {
     try {
       const { documentoId } = req.params;
 
-      console.log('📥 Solicitação de download do documento:', documentoId);
-
       // Buscar informações do documento no banco
       const [documentos] = await pool.execute<RowDataPacket[]>(
         `SELECT id, nome_arquivo, nome_original, tipo_documento, caminho_arquivo 
@@ -604,8 +570,6 @@ class RecursosGlosaController {
         }
       }
 
-      console.log('📂 Caminho do arquivo resolvido:', filePath);
-
       // Verificar se o arquivo existe
       if (!filePath || !fs.existsSync(filePath)) {
         console.error('❌ Arquivo não encontrado no sistema de arquivos. nome_arquivo:', documento.nome_arquivo, 'caminho_arquivo:', documento.caminho_arquivo, 'filePathResolvido:', filePath);
@@ -622,16 +586,13 @@ class RecursosGlosaController {
 
       // Determinar o tipo MIME do arquivo
       const mimeType = mime.lookup(documento.nome_original) || 'application/octet-stream';
-      
-      console.log('✅ Enviando arquivo:', documento.nome_original, 'tipo:', mimeType);
 
       // Configurar headers para download/visualização
       res.setHeader('Content-Type', mimeType);
       res.setHeader('Content-Disposition', `inline; filename="${documento.nome_original}"`);
-      
+
       // Enviar o arquivo
       fs.createReadStream(filePath).pipe(res);
-
     } catch (error: any) {
       console.error('Erro ao fazer download do documento:', error);
       res.status(500).json({

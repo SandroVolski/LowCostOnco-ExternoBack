@@ -13,14 +13,12 @@ const measureResponseTime = async (url, description) => {
     });
     const endTime = Date.now();
     const duration = endTime - startTime;
-    
-    console.log(`✅ ${description}: ${duration}ms (${(response.data.length / 1024).toFixed(2)} KB)`);
+
     return { success: true, duration, size: response.data.length };
   } catch (error) {
     const endTime = Date.now();
     const duration = endTime - startTime;
-    
-    console.log(`❌ ${description}: ${duration}ms (Erro: ${error.message})`);
+
     return { success: false, duration, error: error.message };
   }
 };
@@ -59,52 +57,35 @@ const createTestSolicitacao = async () => {
 
 // Função principal de teste
 async function testPDFPerformance() {
-  console.log('🚀 Iniciando testes de performance de PDF...\n');
-  
   try {
-    // 1. Criar solicitação de teste
-    console.log('1️⃣ Criando solicitação de teste...');
     const solicitacaoId = await createTestSolicitacao();
-    
+
     if (!solicitacaoId) {
-      console.log('❌ Não foi possível criar solicitação de teste');
       return;
     }
-    
-    console.log(`✅ Solicitação criada com ID: ${solicitacaoId}\n`);
-    
-    // 2. Teste de download (primeira vez - sem cache)
-    console.log('2️⃣ Teste de DOWNLOAD (primeira vez - sem cache)...');
+
     const downloadResult1 = await measureResponseTime(
       `${API_BASE_URL}/solicitacoes/${solicitacaoId}/pdf`,
       'Download (sem cache)'
     );
-    
-    // 3. Teste de visualização (primeira vez - sem cache)
-    console.log('\n3️⃣ Teste de VISUALIZAÇÃO (primeira vez - sem cache)...');
+
     const viewResult1 = await measureResponseTime(
       `${API_BASE_URL}/solicitacoes/${solicitacaoId}/pdf?view=true`,
       'Visualização (sem cache)'
     );
-    
-    // 4. Teste de download (segunda vez - com cache)
-    console.log('\n4️⃣ Teste de DOWNLOAD (segunda vez - com cache)...');
+
     const downloadResult2 = await measureResponseTime(
       `${API_BASE_URL}/solicitacoes/${solicitacaoId}/pdf`,
       'Download (com cache)'
     );
-    
-    // 5. Teste de visualização (segunda vez - com cache)
-    console.log('\n5️⃣ Teste de VISUALIZAÇÃO (segunda vez - com cache)...');
+
     const viewResult2 = await measureResponseTime(
       `${API_BASE_URL}/solicitacoes/${solicitacaoId}/pdf?view=true`,
       'Visualização (com cache)'
     );
-    
-    // 6. Teste de múltiplas requisições simultâneas
-    console.log('\n6️⃣ Teste de múltiplas requisições simultâneas...');
+
     const concurrentPromises = [];
-    
+
     for (let i = 0; i < 3; i++) {
       concurrentPromises.push(
         measureResponseTime(
@@ -113,55 +94,30 @@ async function testPDFPerformance() {
         )
       );
     }
-    
+
     const concurrentResults = await Promise.all(concurrentPromises);
-    
-    // 7. Análise dos resultados
-    console.log('\n📊 ANÁLISE DOS RESULTADOS:');
-    console.log('=' .repeat(50));
-    
+
     if (downloadResult1.success && viewResult1.success) {
       const downloadTime = downloadResult1.duration;
       const viewTime = viewResult1.duration;
       const difference = viewTime - downloadTime;
       const percentage = ((difference / downloadTime) * 100).toFixed(1);
-      
-      console.log(`⏱️  Download (sem cache): ${downloadTime}ms`);
-      console.log(`⏱️  Visualização (sem cache): ${viewTime}ms`);
-      console.log(`📈 Diferença: ${difference}ms (${percentage}% mais lento)`);
-      
-      if (difference > 0) {
-        console.log(`🔍 A visualização é ${percentage}% mais lenta que o download`);
-        console.log(`💡 Isso é normal devido ao processamento adicional de headers CSP`);
-      } else {
-        console.log(`🎉 A visualização é mais rápida que o download!`);
-      }
+
+      if (difference > 0) {} else {}
     }
-    
+
     if (downloadResult2.success && downloadResult1.success) {
       const cacheImprovement = downloadResult1.duration - downloadResult2.duration;
       const cachePercentage = ((cacheImprovement / downloadResult1.duration) * 100).toFixed(1);
-      
-      console.log(`\n💾 Melhoria com cache: ${cacheImprovement}ms (${cachePercentage}% mais rápido)`);
     }
-    
+
     // 8. Estatísticas das requisições simultâneas
     const successfulConcurrent = concurrentResults.filter(r => r.success);
     if (successfulConcurrent.length > 0) {
       const avgConcurrentTime = successfulConcurrent.reduce((sum, r) => sum + r.duration, 0) / successfulConcurrent.length;
-      console.log(`\n🔄 Tempo médio de requisições simultâneas: ${Math.round(avgConcurrentTime)}ms`);
     }
-    
-    console.log('\n✅ Testes de performance concluídos!');
-    console.log('\n💡 DICAS PARA MELHORAR PERFORMANCE:');
-    console.log('   • Use cache para downloads repetidos');
-    console.log('   • Considere pré-gerar PDFs para visualização');
-    console.log('   • Implemente lazy loading para PDFs grandes');
-    console.log('   • Use CDN para distribuir carga');
-    
   } catch (error) {
     console.error('❌ Erro durante os testes:', error.message);
-    console.log('\n💡 Certifique-se de que o servidor está rodando em http://localhost:3001');
   }
 }
 

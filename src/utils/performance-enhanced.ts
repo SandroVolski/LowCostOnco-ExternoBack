@@ -48,7 +48,6 @@ const performanceState: PerformanceState = {
 // Função para atualizar configurações
 export const updatePerformanceConfig = (newConfig: Partial<PerformanceConfig>) => {
   performanceState.config = { ...performanceState.config, ...newConfig };
-  console.log('🔧 Configuração de performance atualizada:', performanceState.config);
 };
 
 // Circuit breaker para endpoints problemáticos
@@ -61,10 +60,10 @@ const checkCircuitBreaker = (endpoint: string): boolean => {
   // Se o circuit breaker está aberto, verificar se deve fechar
   if (breaker.isOpen) {
     const timeSinceLastFailure = Date.now() - breaker.lastFailure;
-    if (timeSinceLastFailure > 60000) { // 1 minuto
+    if (timeSinceLastFailure > 60000) {
+      // 1 minuto
       breaker.isOpen = false;
       breaker.failures = 0;
-      console.log(`🔄 Circuit breaker fechado para ${endpoint}`);
       return false;
     }
     return true;
@@ -182,17 +181,7 @@ export const enhancedPerformanceMonitor = (req: Request, res: Response, next: Ne
     }
     
     // Log detalhado para requisições muito lentas
-    if (duration > 10000) {
-      console.log(`📊 Detalhes da requisição lenta:`, {
-        endpoint,
-        duration: `${duration}ms`,
-        userAgent: req.get('User-Agent'),
-        ip: req.ip,
-        query: req.query,
-        body: req.method === 'POST' ? JSON.stringify(req.body).substring(0, 200) : undefined,
-        activeRequests: performanceState.activeRequests.size
-      });
-    }
+    if (duration > 10000) {}
     
     return originalEnd.call(this, chunk, encoding);
   };
@@ -249,7 +238,6 @@ export const killAllActiveRequests = () => {
 // Função para resetar circuit breakers
 export const resetCircuitBreakers = () => {
   performanceState.circuitBreakers.clear();
-  console.log('🔄 Todos os circuit breakers foram resetados');
 };
 
 // Middleware para endpoints específicos com timeout customizado
@@ -276,13 +264,7 @@ export const withCustomTimeout = (timeoutMs: number) => {
 };
 
 // Event listeners para ações automáticas
-performanceEvents.on('critical', (data) => {
-  console.log(`🚨 Ação automática: Requisição crítica detectada em ${data.endpoint}`);
-  // Aqui você pode implementar ações como:
-  // - Enviar alerta por email/Slack
-  // - Reiniciar serviços específicos
-  // - Escalar recursos automaticamente
-});
+performanceEvents.on('critical', (data) => {});
 
 performanceEvents.on('slow', (data) => {
   // Log adicional ou métricas para requisições lentas

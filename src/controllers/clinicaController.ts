@@ -32,13 +32,10 @@ export class ClinicaController {
       // Se tiver autenticação, usar o ID da clínica do token
       // Senão, usar ID padrão para desenvolvimento
       const clinicaId = req.user?.clinicaId || req.user?.id || 1;
-      
-      console.log('🔧 Buscando perfil da clínica ID:', clinicaId);
-      
+
       const profile = await ClinicaModel.findById(clinicaId);
-      
+
       if (!profile) {
-        console.log('⚠️  Perfil da clínica não encontrado para ID:', clinicaId);
         const response: ApiResponse = {
           success: false,
           message: 'Perfil da clínica não encontrado'
@@ -46,15 +43,13 @@ export class ClinicaController {
         res.status(404).json(response);
         return;
       }
-      
-      console.log('✅ Perfil da clínica encontrado:', profile.clinica.nome);
-      
+
       const response: ApiResponse = {
         success: true,
         message: 'Perfil da clínica encontrado com sucesso',
         data: profile
       };
-      
+
       res.json(response);
     } catch (error) {
       console.error('❌ Erro ao buscar perfil da clínica:', error);
@@ -72,13 +67,9 @@ export class ClinicaController {
     try {
       const clinicaId = req.user?.clinicaId || req.user?.id || 1;
       const updateData: UpdateClinicProfileRequest = req.body;
-      
-      console.log('🔧 Atualizando perfil da clínica ID:', clinicaId);
-      console.log('📋 Dados recebidos:', JSON.stringify(updateData, null, 2));
-      
+
       // Validações básicas
       if (!updateData.clinica) {
-        console.log('❌ Dados da clínica não fornecidos');
         const response: ApiResponse = {
           success: false,
           message: 'Dados da clínica são obrigatórios'
@@ -86,27 +77,23 @@ export class ClinicaController {
         res.status(400).json(response);
         return;
       }
-      
+
       // ✅ VALIDAÇÃO ADICIONAL: Verificar se não estão sendo enviados campos proibidos
       const forbiddenFields = ['id', 'created_at', 'updated_at'];
       const receivedForbiddenFields = forbiddenFields.filter(field => 
         updateData.clinica.hasOwnProperty(field)
       );
-      
+
       if (receivedForbiddenFields.length > 0) {
-        console.log('⚠️  Campos proibidos detectados:', receivedForbiddenFields);
-        console.log('🧹 Removendo campos proibidos automaticamente...');
-        
         // Remover campos proibidos
         forbiddenFields.forEach(field => {
           delete (updateData.clinica as any)[field];
         });
       }
-      
+
       // Verificar se clínica existe
       const currentProfile = await ClinicaModel.findById(clinicaId);
       if (!currentProfile) {
-        console.log('❌ Clínica não encontrada para ID:', clinicaId);
         const response: ApiResponse = {
           success: false,
           message: 'Clínica não encontrada'
@@ -114,14 +101,11 @@ export class ClinicaController {
         res.status(404).json(response);
         return;
       }
-      
-      console.log('✅ Clínica existente encontrada:', currentProfile.clinica.nome);
-      
+
       // Verificar se código já existe (se estiver sendo atualizado)
       if (updateData.clinica.codigo) {
         const codeExists = await ClinicaModel.checkCodeExists(updateData.clinica.codigo, clinicaId);
         if (codeExists) {
-          console.log('❌ Código já existe:', updateData.clinica.codigo);
           const response: ApiResponse = {
             success: false,
             message: 'Já existe uma clínica com este código'
@@ -130,25 +114,18 @@ export class ClinicaController {
           return;
         }
       }
-      
-      // Atualizar dados da clínica
-      console.log('🔄 Iniciando atualização da clínica...');
+
       const updatedClinica = await ClinicaModel.update(clinicaId, updateData.clinica);
       if (!updatedClinica) {
-        console.log('❌ Falha na atualização da clínica');
         throw new Error('Erro ao atualizar clínica');
       }
-      
-      console.log('✅ Clínica atualizada com sucesso');
-      
+
       // Processar responsáveis técnicos se fornecidos
       if (updateData.responsaveis_tecnicos) {
-        console.log('🔄 Processando responsáveis técnicos...');
         const { create, update, delete: deleteIds } = updateData.responsaveis_tecnicos;
-        
+
         // Criar novos responsáveis
         if (create && create.length > 0) {
-          console.log('➕ Criando', create.length, 'novos responsáveis');
           for (const responsavelData of create) {
             // Verificar se registro já existe na clínica
             const registroExists = await ResponsavelTecnicoModel.checkRegistroExists(
@@ -156,7 +133,6 @@ export class ClinicaController {
               responsavelData.registro_conselho
             );
             if (registroExists) {
-              console.log('❌ Registro já existe:', responsavelData.registro_conselho);
               const response: ApiResponse = {
                 success: false,
                 message: `Registro ${responsavelData.registro_conselho} já está cadastrado nesta clínica`
@@ -164,16 +140,14 @@ export class ClinicaController {
               res.status(400).json(response);
               return;
             }
-            
+
             responsavelData.clinica_id = clinicaId;
             await ResponsavelTecnicoModel.create(responsavelData);
-            console.log('✅ Responsável criado:', responsavelData.nome);
           }
         }
-        
+
         // Atualizar responsáveis existentes
         if (update && update.length > 0) {
-          console.log('🔄 Atualizando', update.length, 'responsáveis');
           for (const updateItem of update) {
             // Verificar se CRM já existe na clínica (excluindo o próprio)
             if (updateItem.data.registro_conselho) {
@@ -183,7 +157,6 @@ export class ClinicaController {
                 updateItem.id
               );
               if (registroExists) {
-                console.log('❌ Registro já existe (update):', updateItem.data.registro_conselho);
                 const response: ApiResponse = {
                   success: false,
                   message: `Registro ${updateItem.data.registro_conselho} já está cadastrado nesta clínica`
@@ -192,39 +165,31 @@ export class ClinicaController {
                 return;
               }
             }
-            
+
             await ResponsavelTecnicoModel.update(updateItem.id, updateItem.data);
-            console.log('✅ Responsável atualizado ID:', updateItem.id);
           }
         }
-        
+
         // Deletar responsáveis
         if (deleteIds && deleteIds.length > 0) {
-          console.log('🗑️  Deletando', deleteIds.length, 'responsáveis');
           for (const id of deleteIds) {
             await ResponsavelTecnicoModel.delete(id);
-            console.log('✅ Responsável deletado ID:', id);
           }
         }
       }
-      
-      // Buscar perfil atualizado
-      console.log('🔍 Buscando perfil atualizado...');
+
       const updatedProfile = await ClinicaModel.findById(clinicaId);
-      
+
       if (!updatedProfile) {
-        console.log('❌ Erro ao buscar perfil atualizado');
         throw new Error('Erro ao buscar perfil atualizado');
       }
-      
-      console.log('✅ Perfil atualizado com sucesso!');
-      
+
       const response: ApiResponse = {
         success: true,
         message: 'Perfil atualizado com sucesso',
         data: updatedProfile
       };
-      
+
       res.json(response);
     } catch (error) {
       console.error('❌ Erro ao atualizar perfil da clínica:', error);
@@ -255,12 +220,9 @@ export class ClinicaController {
       }
 
       const clinicaData: ClinicaCreateInput = req.body;
-      
-      console.log('🔧 Registrando nova clínica:', clinicaData.nome);
-      
+
       // Validações básicas
       if (!clinicaData.nome || !clinicaData.codigo) {
-        console.log('❌ Dados obrigatórios faltando');
         const response: ApiResponse = {
           success: false,
           message: 'Nome e código da clínica são obrigatórios'
@@ -268,11 +230,10 @@ export class ClinicaController {
         res.status(400).json(response);
         return;
       }
-      
+
       // Verificar se código já existe
       const codeExists = await ClinicaModel.checkCodeExists(clinicaData.codigo);
       if (codeExists) {
-        console.log('❌ Código já existe:', clinicaData.codigo);
         const response: ApiResponse = {
           success: false,
           message: 'Já existe uma clínica com este código'
@@ -280,12 +241,11 @@ export class ClinicaController {
         res.status(400).json(response);
         return;
       }
-      
+
       // Verificar se usuário já existe (se fornecido)
       if (clinicaData.usuario) {
         const userExists = await ClinicaModel.checkUserExists(clinicaData.usuario);
         if (userExists) {
-          console.log('❌ Usuário já existe:', clinicaData.usuario);
           const response: ApiResponse = {
             success: false,
             message: 'Já existe uma clínica com este usuário'
@@ -294,43 +254,38 @@ export class ClinicaController {
           return;
         }
       }
-      
+
       // Hash da senha se fornecida
       if (clinicaData.senha) {
         clinicaData.senha = await bcrypt.hash(clinicaData.senha, 10);
       }
-      
+
       const novaClinica = await ClinicaModel.create(clinicaData);
-      
-      console.log('✅ Clínica registrada com sucesso:', novaClinica.nome);
-      
+
       // Criar usuário na tabela usuarios para login
       if (clinicaData.usuario && clinicaData.senha) {
         try {
-          console.log('🔧 Criando usuário na tabela usuarios:', clinicaData.usuario);
-          
           const insertUserQuery = `
             INSERT INTO usuarios (username, password_hash, role, clinica_id, status, created_at, updated_at)
             VALUES (?, ?, 'clinica', ?, 'ativo', NOW(), NOW())
           `;
-          
+
           await query(insertUserQuery, [clinicaData.usuario, clinicaData.senha, novaClinica.id]);
-          console.log('✅ Usuário criado na tabela usuarios para login');
         } catch (userError) {
           console.error('⚠️ Erro ao criar usuário na tabela usuarios:', userError);
           // Não falhar o registro da clínica por causa do usuário
         }
       }
-      
+
       // Remover senha da resposta
       const { senha, ...clinicaResponse } = novaClinica;
-      
+
       const response: ApiResponse = {
         success: true,
         message: 'Clínica registrada com sucesso',
         data: clinicaResponse
       };
-      
+
       res.status(201).json(response);
     } catch (error) {
       console.error('❌ Erro ao registrar clínica:', error);
@@ -347,12 +302,9 @@ export class ClinicaController {
   static async login(req: Request, res: Response): Promise<void> {
     try {
       const { usuario, senha }: ClinicLoginRequest = req.body;
-      
-      console.log('🔧 Tentativa de login para usuário:', usuario);
-      
+
       // Validações básicas
       if (!usuario || !senha) {
-        console.log('❌ Credenciais faltando');
         const response: ApiResponse = {
           success: false,
           message: 'Usuário e senha são obrigatórios'
@@ -360,23 +312,20 @@ export class ClinicaController {
         res.status(400).json(response);
         return;
       }
-      
+
       // Buscar usuário na tabela usuarios (consolidada)
       const usuarios = await query(
         'SELECT u.*, c.nome as clinica_nome, c.codigo as clinica_codigo, c.status as clinica_status FROM usuarios u JOIN clinicas c ON u.clinica_id = c.id WHERE u.username = ? AND u.status = ? AND u.role IN ("admin", "clinica")',
         [usuario, 'ativo']
       );
-      
+
       if (usuarios.length === 0) {
-        // Fallback: tentar login direto da clínica
-        console.log('🔍 Tentando login direto da clínica:', usuario);
         const clinicas = await query(
           'SELECT * FROM clinicas WHERE usuario = ? AND status = ?',
           [usuario, 'ativo']
         );
-        
+
         if (clinicas.length === 0) {
-          console.log('❌ Usuário não encontrado:', usuario);
           const response: ApiResponse = {
             success: false,
             message: 'Usuário ou senha inválidos'
@@ -384,7 +333,7 @@ export class ClinicaController {
           res.status(401).json(response);
           return;
         }
-        
+
         // Usar dados da clínica diretamente
         const clinica = clinicas[0];
         const clinicaResponse = {
@@ -393,10 +342,9 @@ export class ClinicaController {
           codigo: clinica.codigo,
           status: clinica.status
         };
-        
+
         // Verificar senha da clínica
-        if (!clinica.senha || !await bcrypt.compare(senha, clinica.senha)) {
-          console.log('❌ Senha inválida para clínica:', usuario);
+        if (!clinica.senha || !(await bcrypt.compare(senha, clinica.senha))) {
           const response: ApiResponse = {
             success: false,
             message: 'Usuário ou senha inválidos'
@@ -404,7 +352,7 @@ export class ClinicaController {
           res.status(401).json(response);
           return;
         }
-        
+
         // Gerar token para clínica
         const token = jwt.sign(
           { 
@@ -416,9 +364,7 @@ export class ClinicaController {
           process.env.JWT_SECRET || 'dev-secret',
           { expiresIn: '7d' }
         );
-        
-        console.log('✅ Login direto da clínica realizado:', clinica.nome);
-        
+
         const response: ApiResponse = {
           success: true,
           message: 'Login realizado com sucesso',
@@ -427,16 +373,15 @@ export class ClinicaController {
             token
           }
         };
-        
+
         res.json(response);
         return;
       }
-      
+
       const usuarioClinica = usuarios[0];
-      
+
       // Verificar senha
-      if (!usuarioClinica.password_hash || !await bcrypt.compare(senha, usuarioClinica.password_hash)) {
-        console.log('❌ Senha inválida para usuário:', usuario);
+      if (!usuarioClinica.password_hash || !(await bcrypt.compare(senha, usuarioClinica.password_hash))) {
         const response: ApiResponse = {
           success: false,
           message: 'Usuário ou senha inválidos'
@@ -444,10 +389,9 @@ export class ClinicaController {
         res.status(401).json(response);
         return;
       }
-      
+
       // Verificar se clínica está ativa
       if (usuarioClinica.clinica_status !== 'ativo') {
-        console.log('❌ Clínica inativa:', usuarioClinica.clinica_nome);
         const response: ApiResponse = {
           success: false,
           message: 'Clínica inativa. Entre em contato com o suporte.'
@@ -455,13 +399,13 @@ export class ClinicaController {
         res.status(403).json(response);
         return;
       }
-      
+
       // Atualizar último login
       await query(
         'UPDATE usuarios SET last_login = NOW() WHERE id = ?',
         [usuarioClinica.id]
       );
-      
+
       // Gerar token JWT
       const token = jwt.sign(
         { 
@@ -473,9 +417,7 @@ export class ClinicaController {
         process.env.JWT_SECRET || 'dev-secret',
         { expiresIn: '7d' }
       );
-      
-      console.log('✅ Login realizado com sucesso para:', usuarioClinica.nome);
-      
+
       // Preparar resposta
       const clinicaResponse = {
         id: usuarioClinica.clinica_id,
@@ -483,7 +425,7 @@ export class ClinicaController {
         codigo: usuarioClinica.clinica_codigo,
         status: usuarioClinica.clinica_status
       };
-      
+
       const response: ApiResponse = {
         success: true,
         message: 'Login realizado com sucesso',
@@ -499,7 +441,7 @@ export class ClinicaController {
           }
         }
       };
-      
+
       res.json(response);
     } catch (error) {
       console.error('❌ Erro no login da clínica:', error);
@@ -517,13 +459,9 @@ export class ClinicaController {
     try {
       const clinicaId = req.user?.clinicaId || req.user?.id || 1;
       const responsavelData: ResponsavelTecnicoCreateInput = req.body;
-      
-      console.log('🔧 Adicionando responsável técnico para clínica ID:', clinicaId);
-      console.log('👨‍⚕️ Dados do responsável:', responsavelData);
-      
+
       // Validações básicas
       if (!responsavelData.nome || !responsavelData.registro_conselho || !responsavelData.especialidade_principal) {
-        console.log('❌ Dados obrigatórios faltando');
         const response: ApiResponse = {
           success: false,
           message: 'Nome, Registro do Conselho e especialidade principal são obrigatórios'
@@ -531,11 +469,10 @@ export class ClinicaController {
         res.status(400).json(response);
         return;
       }
-      
+
       // Verificar se Registro do Conselho já existe na clínica
       const registroExists = await ResponsavelTecnicoModel.checkRegistroExists(clinicaId, responsavelData.registro_conselho);
       if (registroExists) {
-        console.log('❌ Registro do Conselho já existe:', responsavelData.registro_conselho);
         const response: ApiResponse = {
           success: false,
           message: 'Registro do Conselho já está cadastrado nesta clínica'
@@ -543,18 +480,16 @@ export class ClinicaController {
         res.status(400).json(response);
         return;
       }
-      
+
       responsavelData.clinica_id = clinicaId;
       const novoResponsavel = await ResponsavelTecnicoModel.create(responsavelData);
-      
-      console.log('✅ Responsável técnico adicionado:', novoResponsavel.nome);
-      
+
       const response: ApiResponse = {
         success: true,
         message: 'Responsável técnico adicionado com sucesso',
         data: novoResponsavel
       };
-      
+
       res.status(201).json(response);
     } catch (error) {
       console.error('❌ Erro ao adicionar responsável técnico:', error);
@@ -573,12 +508,8 @@ export class ClinicaController {
       const id = parseInt(req.params.id);
       const clinicaId = req.user?.clinicaId || req.user?.id || 1;
       const responsavelData: ResponsavelTecnicoUpdateInput = req.body;
-      
-      console.log('🔧 Atualizando responsável técnico ID:', id);
-      console.log('📋 Dados recebidos:', responsavelData);
-      
+
       if (isNaN(id)) {
-        console.log('❌ ID inválido:', req.params.id);
         const response: ApiResponse = {
           success: false,
           message: 'ID inválido'
@@ -586,11 +517,10 @@ export class ClinicaController {
         res.status(400).json(response);
         return;
       }
-      
+
       // Verificar se responsável existe e pertence à clínica
       const currentResponsavel = await ResponsavelTecnicoModel.findById(id);
       if (!currentResponsavel || currentResponsavel.clinica_id !== clinicaId) {
-        console.log('❌ Responsável não encontrado ou não pertence à clínica');
         const response: ApiResponse = {
           success: false,
           message: 'Responsável técnico não encontrado'
@@ -598,7 +528,7 @@ export class ClinicaController {
         res.status(404).json(response);
         return;
       }
-      
+
       // Verificar se registro já existe na clínica (se estiver sendo atualizado)
       if (responsavelData.registro_conselho) {
         const registroExists = await ResponsavelTecnicoModel.checkRegistroExists(
@@ -607,7 +537,6 @@ export class ClinicaController {
           id
         );
         if (registroExists) {
-          console.log('❌ Registro já existe (update):', responsavelData.registro_conselho);
           const response: ApiResponse = {
             success: false,
             message: 'Registro já está cadastrado nesta clínica'
@@ -616,11 +545,10 @@ export class ClinicaController {
           return;
         }
       }
-      
+
       const responsavelAtualizado = await ResponsavelTecnicoModel.update(id, responsavelData);
-      
+
       if (!responsavelAtualizado) {
-        console.log('❌ Falha na atualização do responsável');
         const response: ApiResponse = {
           success: false,
           message: 'Erro ao atualizar responsável técnico'
@@ -628,15 +556,13 @@ export class ClinicaController {
         res.status(500).json(response);
         return;
       }
-      
-      console.log('✅ Responsável técnico atualizado:', responsavelAtualizado.nome);
-      
+
       const response: ApiResponse = {
         success: true,
         message: 'Responsável técnico atualizado com sucesso',
         data: responsavelAtualizado
       };
-      
+
       res.json(response);
     } catch (error) {
       console.error('❌ Erro ao atualizar responsável técnico:', error);
@@ -654,11 +580,8 @@ export class ClinicaController {
     try {
       const id = parseInt(req.params.id);
       const clinicaId = req.user?.clinicaId || req.user?.id || 1;
-      
-      console.log('🔧 Removendo responsável técnico ID:', id);
-      
+
       if (isNaN(id)) {
-        console.log('❌ ID inválido:', req.params.id);
         const response: ApiResponse = {
           success: false,
           message: 'ID inválido'
@@ -666,11 +589,10 @@ export class ClinicaController {
         res.status(400).json(response);
         return;
       }
-      
+
       // Verificar se responsável existe e pertence à clínica
       const currentResponsavel = await ResponsavelTecnicoModel.findById(id);
       if (!currentResponsavel || currentResponsavel.clinica_id !== clinicaId) {
-        console.log('❌ Responsável não encontrado ou não pertence à clínica');
         const response: ApiResponse = {
           success: false,
           message: 'Responsável técnico não encontrado'
@@ -678,18 +600,16 @@ export class ClinicaController {
         res.status(404).json(response);
         return;
       }
-      
+
       const deleted = await ResponsavelTecnicoModel.delete(id);
-      
+
       if (deleted) {
-        console.log('✅ Responsável técnico removido:', currentResponsavel.nome);
         const response: ApiResponse = {
           success: true,
           message: 'Responsável técnico removido com sucesso'
         };
         res.json(response);
       } else {
-        console.log('❌ Falha na remoção do responsável');
         const response: ApiResponse = {
           success: false,
           message: 'Erro ao remover responsável técnico'
@@ -715,7 +635,7 @@ export class ClinicaController {
   static async getClinicasPorOperadora(req: AuthRequest, res: Response): Promise<void> {
     try {
       const operadoraId = req.user?.operadoraId || req.query.operadora_id;
-      
+
       if (!operadoraId) {
         const response: ApiResponse = {
           success: false,
@@ -725,12 +645,8 @@ export class ClinicaController {
         return;
       }
 
-      console.log('🔧 Buscando clínicas da operadora ID:', operadoraId);
-      
       // Buscar clínicas reais do banco filtradas por operadora_id
       const clinicas = await ClinicaModel.findByOperadoraId(Number(operadoraId));
-      
-      console.log(`✅ ${clinicas.length} clínicas encontradas para operadora ${operadoraId}`);
 
       const response: ApiResponse = {
         success: true,
@@ -753,17 +669,12 @@ export class ClinicaController {
   // GET /api/clinicas/admin - Listar todas as clínicas (admin) com paginação e busca
   static async getAllClinicas(req: Request, res: Response): Promise<void> {
     try {
-      console.log('🔧 ClinicaController.getAllClinicas() iniciado');
-      
       // Parâmetros de paginação e busca
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 50; // Limite padrão de 50
       const search = req.query.search as string || '';
       const offset = (page - 1) * limit;
-      
-      console.log(`🔧 Paginação: página ${page}, limite ${limit}, offset ${offset}`);
-      console.log(`🔧 Busca: "${search}"`);
-      
+
       // Construir query com busca
       let whereClause = '';
       let countWhereClause = '';
@@ -772,14 +683,11 @@ export class ClinicaController {
         whereClause = `WHERE nome LIKE '${searchTerm}' OR razao_social LIKE '${searchTerm}' OR codigo LIKE '${searchTerm}' OR cnpj LIKE '${searchTerm}'`;
         countWhereClause = `WHERE nome LIKE '${searchTerm}' OR razao_social LIKE '${searchTerm}' OR codigo LIKE '${searchTerm}' OR cnpj LIKE '${searchTerm}'`;
       }
-      
-      // Buscar clínicas com paginação e busca
-      console.log('🔧 Executando query com paginação e busca...');
+
       const clinicas = await query(
         `SELECT * FROM clinicas ${whereClause} ORDER BY nome ASC LIMIT ${Number(limit)} OFFSET ${Number(offset)}`
       );
-      console.log('✅ Clínicas encontradas no banco real:', clinicas.length);
-      
+
       // Processar dados para garantir estrutura esperada pelo frontend
       const clinicasProcessadas = clinicas.map((clinica: any) => {
         // Processar endereco_completo (JSON)
@@ -876,7 +784,7 @@ export class ClinicaController {
       // Buscar total de clínicas para paginação (considerando busca)
       const totalResult = await query(`SELECT COUNT(*) as total FROM clinicas ${countWhereClause}`);
       const total = totalResult[0]?.total || 0;
-      
+
       const response = {
         success: true,
         message: 'Clínicas encontradas',
@@ -891,7 +799,6 @@ export class ClinicaController {
         }
       };
 
-      console.log(`✅ Clínicas processadas: ${clinicasProcessadas.length}/${total} (página ${page})`);
       res.json(response);
     } catch (error) {
       console.error('❌ Erro ao buscar todas as clínicas:', error);
@@ -960,16 +867,11 @@ export class ClinicaController {
           const contatosObj = typeof clinica.contatos === 'string'
             ? JSON.parse(clinica.contatos)
             : clinica.contatos;
-          
-          console.log('🔧 [getClinicaById] Contatos JSON processado:', JSON.stringify(contatosObj, null, 2));
-          
+
           // Garantir que telefones e emails não sejam arrays vazios
           const telefones = contatosObj.pacientes?.telefones || [];
           const emails = contatosObj.pacientes?.emails || [];
-          
-          console.log('🔧 [getClinicaById] Telefones extraídos:', telefones);
-          console.log('🔧 [getClinicaById] Emails extraídos:', emails);
-          
+
           contatosData = {
             telefones: telefones.length > 0 ? telefones : [''],
             emails: emails.length > 0 ? emails : [''],
@@ -1044,11 +946,8 @@ export class ClinicaController {
   // POST /api/clinicas/admin - Criar nova clínica (admin)
   static async createClinica(req: Request, res: Response): Promise<void> {
     try {
-      console.log('🔧 Iniciando criação de clínica via admin...');
-      console.log('📋 Dados recebidos:', req.body);
-      
       const clinicaData: ClinicaCreateInput = req.body;
-      
+
       // Validações básicas
       if (!clinicaData.nome || !clinicaData.codigo) {
         const response: ApiResponse = {
@@ -1063,7 +962,6 @@ export class ClinicaController {
       if (clinicaData.usuario) {
         const userExists = await ClinicaModel.checkUserExists(clinicaData.usuario);
         if (userExists) {
-          console.log('❌ Usuário já existe:', clinicaData.usuario);
           const response: ApiResponse = {
             success: false,
             message: 'Já existe uma clínica com este usuário'
@@ -1072,27 +970,23 @@ export class ClinicaController {
           return;
         }
       }
-      
+
       // Hash da senha se fornecida
       if (clinicaData.senha) {
         clinicaData.senha = await bcrypt.hash(clinicaData.senha, 10);
       }
-      
+
       // Criar clínica usando o modelo
       const novaClinica = await ClinicaModel.create(clinicaData);
-      
-      console.log('✅ Clínica criada com sucesso:', novaClinica.nome);
-      
+
       // Criar usuário na tabela usuarios para login
       if (clinicaData.usuario && clinicaData.senha) {
         try {
-          console.log('🔧 Criando usuário na tabela usuarios:', clinicaData.usuario);
-          
           const insertUserQuery = `
             INSERT INTO usuarios (username, password_hash, role, clinica_id, operadora_id, status, nome, created_at, updated_at)
             VALUES (?, ?, 'clinica', ?, ?, 'ativo', ?, NOW(), NOW())
           `;
-          
+
           await query(insertUserQuery, [
             clinicaData.usuario, 
             clinicaData.senha, 
@@ -1100,16 +994,15 @@ export class ClinicaController {
             clinicaData.operadora_id || null,
             clinicaData.nome // Adicionar o nome da clínica como nome do usuário
           ]);
-          console.log('✅ Usuário criado na tabela usuarios para login');
         } catch (userError) {
           console.error('⚠️ Erro ao criar usuário na tabela usuarios:', userError);
           // Não falhar o registro da clínica por causa do usuário
         }
       }
-      
+
       // Remover senha da resposta
       const { senha, ...clinicaResponse } = novaClinica;
-      
+
       const response: ApiResponse = {
         success: true,
         message: 'Clínica criada com sucesso',
@@ -1133,11 +1026,7 @@ export class ClinicaController {
     try {
       const { id } = req.params;
       const updateData = req.body;
-      
-      console.log('🔧 Iniciando atualização de clínica via admin...');
-      console.log('📋 ID da clínica:', id);
-      console.log('📋 Dados recebidos:', updateData);
-      
+
       if (!id) {
         const response: ApiResponse = {
           success: false,
@@ -1239,8 +1128,6 @@ export class ClinicaController {
 
       // Executar atualização
       const sql = `UPDATE clinicas SET ${updateFields.join(', ')} WHERE id = ?`;
-      console.log('🔧 SQL de atualização:', sql);
-      console.log('🔧 Valores:', updateValues);
 
       await query(sql, updateValues);
 
@@ -1339,7 +1226,6 @@ export class ClinicaController {
         data: clinicaProcessada
       };
 
-      console.log('✅ Clínica atualizada com sucesso:', clinicaProcessada.nome);
       res.json(response);
     } catch (error) {
       console.error('❌ Erro ao atualizar clínica:', error);

@@ -248,13 +248,13 @@ export class ClinicaModel {
         estado: clinicaData.estado || '',
         cep: clinicaData.cep || ''
       });
-      
+
       // Preparar contatos como JSON - NOVA ESTRUTURA POR SETORES
       // Se telefones e emails vieram do frontend, usar para pacientes
       const contatosPacientes = clinicaData.telefones && clinicaData.emails 
         ? { telefones: clinicaData.telefones, emails: clinicaData.emails }
         : (clinicaData.contatos_pacientes || { telefones: [''], emails: [''] });
-      
+
       const contatos = JSON.stringify({
         pacientes: contatosPacientes,
         administrativos: clinicaData.contatos_administrativos || { telefones: [''], emails: [''] },
@@ -262,7 +262,7 @@ export class ClinicaModel {
         faturamento: clinicaData.contatos_faturamento || { telefones: [''], emails: [''] },
         financeiro: clinicaData.contatos_financeiro || { telefones: [''], emails: [''] }
       });
-      
+
       const insertQuery = `
         INSERT INTO clinicas (
           nome, razao_social, codigo, cnpj, endereco_completo, contatos,
@@ -271,7 +271,7 @@ export class ClinicaModel {
           created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
       `;
-      
+
       const values = [
         clinicaData.nome,
         clinicaData.razao_social || null,
@@ -287,26 +287,16 @@ export class ClinicaModel {
         clinicaData.status || 'ativo',
         clinicaData.operadora_id || null
       ];
-      
-      console.log('🔧 Criando nova clínica...');
-      console.log('📋 Dados preparados:', {
-        nome: clinicaData.nome,
-        codigo: clinicaData.codigo,
-        endereco_completo: enderecoCompleto,
-        contatos: contatos
-      });
-      
+
       const result = await query(insertQuery, values);
       const insertId = result.insertId;
-      
-      console.log('✅ Clínica criada com ID:', insertId);
-      
+
       // Buscar a clínica recém-criada
       const novaClinica = await this.findByIdSimple(insertId);
       if (!novaClinica) {
         throw new Error('Erro ao buscar clínica recém-criada');
       }
-      
+
       return novaClinica;
     } catch (error) {
       console.warn('⚠️ Erro ao conectar com banco, usando dados mock:', error instanceof Error ? error.message : String(error));
@@ -332,7 +322,7 @@ export class ClinicaModel {
       // Construir query dinâmica baseada nos campos fornecidos
       const updateFields: string[] = [];
       const values: any[] = [];
-      
+
       // Campos simples
       if (clinicaData.nome !== undefined) {
         updateFields.push('nome = ?');
@@ -378,7 +368,7 @@ export class ClinicaModel {
         updateFields.push('operadora_id = ?');
         values.push(clinicaData.operadora_id);
       }
-      
+
       // Processar endereco_completo como JSON - NOVA ESTRUTURA
       if (clinicaData.endereco_rua !== undefined || clinicaData.endereco_numero !== undefined || 
           clinicaData.endereco_bairro !== undefined || clinicaData.endereco_complemento !== undefined ||
@@ -395,7 +385,7 @@ export class ClinicaModel {
         updateFields.push('endereco_completo = ?');
         values.push(enderecoCompleto);
       }
-      
+
       // Processar contatos como JSON - NOVA ESTRUTURA POR SETORES
       if (clinicaData.contatos_pacientes !== undefined || clinicaData.contatos_administrativos !== undefined ||
           clinicaData.contatos_legais !== undefined || clinicaData.contatos_faturamento !== undefined ||
@@ -417,31 +407,26 @@ export class ClinicaModel {
         updateFields.push('contatos = ?');
         values.push(contatos);
       }
-      
+
       if (updateFields.length === 0) {
         throw new Error('Nenhum campo para atualizar');
       }
-      
+
       updateFields.push('updated_at = NOW()');
       values.push(id);
-      
+
       const updateQuery = `
         UPDATE clinicas 
         SET ${updateFields.join(', ')}
         WHERE id = ?
       `;
-      
-      console.log('🔧 Atualizando clínica ID:', id);
-      console.log('📋 Campos a atualizar:', updateFields);
-      
+
       const result = await query(updateQuery, values);
-      
+
       if (result.affectedRows === 0) {
         return null; // Clínica não encontrada
       }
-      
-      console.log('✅ Clínica atualizada com sucesso');
-      
+
       // Buscar a clínica atualizada
       return await this.findByIdSimple(id);
     } catch (error) {
@@ -517,18 +502,13 @@ export class ClinicaModel {
   // Buscar todas as clínicas
   static async findAll(): Promise<Clinica[]> {
     try {
-      console.log('🔧 Tentando conectar com banco real...');
-      
       const selectQuery = `
         SELECT * FROM clinicas 
         ORDER BY nome ASC
       `;
-      
-      console.log('🔧 Executando query:', selectQuery);
+
       const result = await query(selectQuery);
-      
-      console.log(`✅ ${result.length} clínicas encontradas no banco real`);
-      
+
       // Processar dados de contato para cada clínica
       return result.map((clinica: any) => processContactData(clinica));
     } catch (error) {
@@ -572,18 +552,14 @@ export class ClinicaModel {
   // Buscar clínicas por operadora
   static async findByOperadoraId(operadoraId: number): Promise<Clinica[]> {
     try {
-      console.log('🔧 Buscando clínicas da operadora:', operadoraId);
-      
       const selectQuery = `
         SELECT * FROM clinicas 
         WHERE operadora_id = ? AND status = 'ativo'
         ORDER BY nome ASC
       `;
-      
+
       const result = await query(selectQuery, [operadoraId]);
-      
-      console.log(`✅ ${result.length} clínicas encontradas no banco`);
-      
+
       // Processar dados de contato para cada clínica
       return result.map((clinica: any) => processContactData(clinica));
     } catch (error) {

@@ -9,7 +9,7 @@ export class PrestadorController {
   static async getPrestadoresByClinica(req: Request, res: Response): Promise<void> {
     try {
       const { clinica_id } = req.query;
-      
+
       if (!clinica_id) {
         res.status(400).json({
           success: false,
@@ -17,11 +17,9 @@ export class PrestadorController {
         });
         return;
       }
-      
-      console.log('🔧 PrestadorController.getPrestadoresByClinica - Clínica ID:', clinica_id);
-      
+
       const prestadores = await PrestadorModel.findByClinicaId(Number(clinica_id));
-      
+
       res.json({
         success: true,
         message: 'Prestadores encontrados',
@@ -39,10 +37,8 @@ export class PrestadorController {
   // Listar todos os prestadores (para admin)
   static async getAllPrestadores(req: Request, res: Response): Promise<void> {
     try {
-      console.log('🔧 PrestadorController.getAllPrestadores');
-      
       const prestadores = await PrestadorModel.findAll();
-      
+
       res.json({
         success: true,
         message: 'Prestadores encontrados',
@@ -61,7 +57,7 @@ export class PrestadorController {
   static async getPrestadorById(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      
+
       if (!id) {
         res.status(400).json({
           success: false,
@@ -69,11 +65,9 @@ export class PrestadorController {
         });
         return;
       }
-      
-      console.log('🔧 PrestadorController.getPrestadorById - ID:', id);
-      
+
       const prestador = await PrestadorModel.findById(Number(id));
-      
+
       if (!prestador) {
         res.status(404).json({
           success: false,
@@ -81,7 +75,7 @@ export class PrestadorController {
         });
         return;
       }
-      
+
       res.json({
         success: true,
         message: 'Prestador encontrado',

@@ -10,20 +10,15 @@ export class OperadoraAuthController {
   // GET /api/operadora-auth/operadoras - Listar operadoras ativas
   static async listarOperadoras(req: Request, res: Response): Promise<void> {
     try {
-      console.log('🔧 Listando operadoras ativas');
-      
       const operadoras = await query(
         'SELECT id, nome, codigo FROM operadoras WHERE status = ? ORDER BY nome',
         ['ativo']
       );
-      
-      console.log(`✅ ${operadoras.length} operadoras encontradas`);
-      
+
       res.json({
         success: true,
         data: operadoras
       });
-      
     } catch (error: any) {
       console.error('❌ Erro ao listar operadoras:', error);
       res.status(500).json({
@@ -38,10 +33,8 @@ export class OperadoraAuthController {
   static async login(req: Request, res: Response): Promise<void> {
     try {
       const { email, username, password } = req.body || {};
-      console.log('🔧 Tentativa de login de operadora:', { email, username });
-      
+
       if ((!email && !username) || !password) {
-        console.log('❌ Credenciais faltando');
         res.status(400).json({ success: false, message: 'Credenciais inválidas' });
         return;
       }
@@ -54,9 +47,9 @@ export class OperadoraAuthController {
         WHERE u.status = 'ativo' 
         AND u.role IN ('operadora_admin', 'operadora_user')
       `;
-      
+
       let params: any[] = [];
-      
+
       if (email) {
         userQuery += ' AND u.email = ?';
         params.push(email);
@@ -64,29 +57,25 @@ export class OperadoraAuthController {
         userQuery += ' AND u.username = ?';
         params.push(username);
       }
-      
+
       const users = await query(userQuery, params);
-      
+
       if (users.length === 0) {
-        console.log('❌ Usuário não encontrado');
         res.status(401).json({ success: false, message: 'Usuário ou senha inválidos' });
         return;
       }
 
       const user = users[0];
-      console.log('✅ Usuário encontrado:', user.nome);
 
       // Verificar senha
       const passwordMatch = await bcrypt.compare(password, user.password_hash);
       if (!passwordMatch) {
-        console.log('❌ Senha inválida');
         res.status(401).json({ success: false, message: 'Usuário ou senha inválidos' });
         return;
       }
 
       // Verificar se operadora está ativa
       if (user.operadora_status !== 'ativo') {
-        console.log('❌ Operadora inativa:', user.operadora_nome);
         res.status(401).json({ success: false, message: 'Operadora inativa ou não encontrada' });
         return;
       }
@@ -96,7 +85,7 @@ export class OperadoraAuthController {
         'UPDATE usuarios SET last_login = NOW() WHERE id = ?',
         [user.id]
       );
-      
+
       // Gerar access token (15 minutos) e refresh token (30 dias)
       const accessPayload = { 
         id: user.id, 
@@ -109,12 +98,10 @@ export class OperadoraAuthController {
         type: 'refresh',
         tipo: 'operadora'
       };
-      
+
       const accessToken = jwt.sign(accessPayload, process.env.JWT_SECRET || 'dev-secret', { expiresIn: '15m' });
       const refreshToken = jwt.sign(refreshPayload, process.env.JWT_SECRET || 'dev-secret', { expiresIn: '30d' });
-      
-      console.log('✅ Login de operadora realizado com sucesso:', user.nome);
-      
+
       res.json({ 
         success: true, 
         accessToken, 

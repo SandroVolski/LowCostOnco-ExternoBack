@@ -58,7 +58,6 @@ export const cacheMiddleware = (ttl: number = CACHE_TTL) => {
     const cached = cache.get(cacheKey);
     
     if (cached && Date.now() - cached.timestamp < cached.ttl) {
-      console.log('📦 Cache hit:', cacheKey);
       return res.json(cached.data);
     }
     
@@ -66,7 +65,6 @@ export const cacheMiddleware = (ttl: number = CACHE_TTL) => {
     const originalJson = res.json;
     res.json = function(data: any) {
       if (res.statusCode === 200) {
-        console.log('💾 Armazenando no cache:', cacheKey);
         cache.set(cacheKey, {
           data,
           timestamp: Date.now(),
@@ -84,16 +82,14 @@ export const cacheMiddleware = (ttl: number = CACHE_TTL) => {
 export const invalidateCache = (pattern?: string): void => {
   if (!pattern) {
     cache.clear();
-    console.log('🗑️ Cache completamente limpo');
     return;
   }
-  
+
   for (const key of cache.keys()) {
     if (key.includes(pattern)) {
       cache.delete(key);
     }
   }
-  console.log(`🗑️ Cache limpo para padrão: ${pattern}`);
 };
 
 // Middleware para adicionar headers de cache

@@ -13,24 +13,14 @@ export class FinanceiroController {
    */
   static async uploadXML(req: Request, res: Response): Promise<void> {
     try {
-      console.log('📁 Upload XML - Dados recebidos:');
-      console.log('File:', req.file ? `${req.file.originalname} (${req.file.size} bytes)` : 'Nenhum arquivo');
-      console.log('Body:', req.body);
-      console.log('Headers:', req.headers);
-
       if (!req.file) {
-        console.log('❌ Erro: Nenhum arquivo XML enviado');
         res.status(400).json({ success: false, message: 'Nenhum arquivo XML enviado' });
         return;
       }
 
       const { clinica_id, operadora_id, competencia: competenciaFornecida } = req.body;
-      console.log('🏥 Clinica ID recebido:', clinica_id, 'Tipo:', typeof clinica_id);
-      console.log('🏢 Operadora ID recebido:', operadora_id, 'Tipo:', typeof operadora_id);
-      console.log('📅 Competência fornecida:', competenciaFornecida);
 
       if (!clinica_id) {
-        console.log('❌ Erro: ID da clínica não fornecido');
         res.status(400).json({ success: false, message: 'ID da clínica não fornecido' });
         return;
       }
@@ -40,14 +30,13 @@ export class FinanceiroController {
 
       // Parse do XML TISS
       const parsedData = await TISSParser.parseXML(xmlContent);
-      
+
       // Buscar operadora automaticamente pelo registroANS se operadora_id não foi fornecido
       let operadoraIdFinal = operadora_id ? parseInt(operadora_id) : undefined;
-      
+
       if (!operadoraIdFinal) {
         const registroANS = parsedData.cabecalho.registroANS || parsedData.operadora.registro_ans;
-        console.log('🔍 Operadora ID não fornecido, buscando pelo registroANS:', registroANS);
-        
+
         if (registroANS) {
           const [operadoraRows] = await pool.execute<RowDataPacket[]>(
             'SELECT id FROM operadoras WHERE registroANS = ? AND status = ?',[registroANS, 'ativo']
@@ -55,14 +44,8 @@ export class FinanceiroController {
           
           if ((operadoraRows as any[]).length > 0) {
             operadoraIdFinal = (operadoraRows as any[])[0].id;
-            console.log('✅ Operadora encontrada automaticamente pelo registroANS:', operadoraIdFinal);
-          } else {
-            console.log('⚠️ Operadora não encontrada pelo registroANS:', registroANS);
-            console.log('📋 Continuando processamento sem operadora_id (usando dados do XML)');
-          }
-        } else {
-          console.log('⚠️ RegistroANS não encontrado no XML');
-        }
+          } else {}
+        } else {}
       }
 
       // Calcular hash do XML
@@ -72,10 +55,7 @@ export class FinanceiroController {
       let competencia = competenciaFornecida;
       if (!competencia || competencia.trim() === '') {
         competencia = TISSParser.extractCompetencia(parsedData.cabecalho.dataRegistroTransacao);
-        console.log('📅 Competência extraída do XML:', competencia);
-      } else {
-        console.log('📅 Usando competência fornecida pelo usuário:', competencia);
-      }
+      } else {}
 
       // Calcular valor total do lote
       const valorTotal = parsedData.guias.reduce(
@@ -143,9 +123,7 @@ export class FinanceiroController {
         versao_tiss: parsedData.versao_tiss
       };
 
-      console.log('🔧 Chamando processarXMLTISS...');
       const loteId = await FinanceiroCompactModel.processarXMLTISS(xmlDataForProcessing, parseInt(clinica_id), operadoraIdFinal);
-      console.log('✅ Lote processado com ID:', loteId);
 
       res.json({
         success: true,
@@ -210,11 +188,9 @@ export class FinanceiroController {
   static async getGuiasPorLote(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      console.log('🔧 Controller - Buscando guias para lote ID:', id);
-      
+
       const guias = await FinanceiroCompactModel.getGuiasByLote(parseInt(id));
-      console.log('✅ Controller - Guias retornadas:', guias.length);
-      
+
       res.json(guias);
     } catch (error: any) {
       console.error('❌ Controller - Erro ao buscar guias:', error);
@@ -242,11 +218,9 @@ export class FinanceiroController {
   static async getAllItemsPorLote(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      console.log('🔧 TESTE - Buscando todos os itens para lote ID:', id);
-      
+
       const itens = await FinanceiroCompactModel.getAllItemsByLote(parseInt(id));
-      console.log('✅ TESTE - Itens retornados:', itens.length);
-      
+
       res.json(itens);
     } catch (error: any) {
       console.error('❌ TESTE - Erro ao buscar itens:', error);

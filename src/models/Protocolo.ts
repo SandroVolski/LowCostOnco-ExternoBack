@@ -4,7 +4,9 @@ import { query } from '../config/database';
 import { Protocolo, ProtocoloCreateInput, ProtocoloUpdateInput, ProtocoloWithMedicamentos, Medicamento } from '../types/protocolo';
 
 const isDevelopmentEnv = (process.env.NODE_ENV || 'development') !== 'production';
-const logDev = (...args: any[]) => { if (isDevelopmentEnv) console.log(...args); };
+const logDev = (...args: any[]) => {
+  isDevelopmentEnv;
+};
 
 async function fetchMedicamentosByProtocoloIds(protocoloIds: number[]): Promise<Map<number, Medicamento[]>> {
   const map = new Map<number, Medicamento[]>();

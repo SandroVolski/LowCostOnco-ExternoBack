@@ -196,10 +196,6 @@ export class AuthController {
         return;
       }
 
-      // Nesta fase mínima, não fazemos lookup real para evitar enumeração de e-mails.
-      // No futuro, podemos gerar token, salvar validade e enviar e-mail de reset.
-      console.log(`🔐 Solicitação de reset de senha recebida para: ${email}`);
-
       res.json({ success: true, message: 'Se o e-mail existir, enviaremos instruções.' });
     } catch (error) {
       res.status(500).json({ success: false, message: 'Erro ao solicitar redefinição de senha' });

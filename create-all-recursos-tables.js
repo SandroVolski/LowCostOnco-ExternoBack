@@ -10,11 +10,7 @@ async function createAllTables() {
     port: process.env.DB_PORT
   });
 
-  console.log('🚀 Criando todas as tabelas do sistema de Recursos de Glosas...\n');
-
   try {
-    // 3. Recursos Glosas (tabela principal)
-    console.log('📋 Criando recursos_glosas...');
     await conn.query(`
       CREATE TABLE IF NOT EXISTS recursos_glosas (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -57,10 +53,6 @@ async function createAllTables() {
         INDEX idx_auditor (auditor_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
-    console.log('  ✅ recursos_glosas criada\n');
-
-    // 4. Documentos
-    console.log('📎 Criando recursos_glosas_documentos...');
     await conn.query(`
       CREATE TABLE IF NOT EXISTS recursos_glosas_documentos (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -78,10 +70,6 @@ async function createAllTables() {
         INDEX idx_recurso (recurso_glosa_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
-    console.log('  ✅ recursos_glosas_documentos criada\n');
-
-    // 5. Pareceres
-    console.log('📝 Criando recursos_glosas_pareceres...');
     await conn.query(`
       CREATE TABLE IF NOT EXISTS recursos_glosas_pareceres (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -103,10 +91,6 @@ async function createAllTables() {
         INDEX idx_auditor (auditor_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
-    console.log('  ✅ recursos_glosas_pareceres criada\n');
-
-    // 6. Histórico
-    console.log('📜 Criando recursos_glosas_historico...');
     await conn.query(`
       CREATE TABLE IF NOT EXISTS recursos_glosas_historico (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -125,10 +109,6 @@ async function createAllTables() {
         INDEX idx_created_at (created_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
-    console.log('  ✅ recursos_glosas_historico criada\n');
-
-    // 7. Chat
-    console.log('💬 Criando recursos_glosas_chat...');
     await conn.query(`
       CREATE TABLE IF NOT EXISTS recursos_glosas_chat (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -146,10 +126,6 @@ async function createAllTables() {
         INDEX idx_lida (lida)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
-    console.log('  ✅ recursos_glosas_chat criada\n');
-
-    // 8. Notificações
-    console.log('🔔 Criando recursos_glosas_notificacoes...');
     await conn.query(`
       CREATE TABLE IF NOT EXISTS recursos_glosas_notificacoes (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -169,10 +145,6 @@ async function createAllTables() {
         INDEX idx_lida (lida)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
-    console.log('  ✅ recursos_glosas_notificacoes criada\n');
-
-    // 9. Views
-    console.log('👁️  Criando views...');
     await conn.query(`
       CREATE OR REPLACE VIEW vw_recursos_glosas_completo AS
       SELECT
@@ -206,9 +178,6 @@ async function createAllTables() {
       LEFT JOIN clinicas c ON rg.clinica_id = c.id
       LEFT JOIN auditores a ON rg.auditor_id = a.id
     `);
-    console.log('  ✅ vw_recursos_glosas_completo criada\n');
-
-    console.log('✅ Todas as tabelas criadas com sucesso!\n');
 
     // Verificar
     const [tables] = await conn.query(`
@@ -218,10 +187,7 @@ async function createAllTables() {
       ORDER BY TABLE_NAME
     `);
 
-    console.log('📋 Tabelas existentes no banco:');
     tables.forEach(t => console.log(`  ✓ ${t.TABLE_NAME}`));
-    console.log();
-
   } catch (error) {
     console.error('❌ Erro:', error.message);
     throw error;
@@ -232,9 +198,8 @@ async function createAllTables() {
 
 createAllTables()
   .then(() => {
-    console.log('🎉 Configuração concluída com sucesso!');
-    process.exit(0);
-  })
+  process.exit(0);
+})
   .catch(err => {
     console.error('💥 Falha na configuração:', err);
     process.exit(1);

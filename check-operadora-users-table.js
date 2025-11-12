@@ -14,16 +14,12 @@ async function checkAndCreateTable() {
       database: process.env.DB_NAME || 'sistema_clinicas'
     });
 
-    console.log('🔧 Conectado ao banco de dados');
-
     // Verificar se a tabela existe
     const [tables] = await connection.execute(
       "SHOW TABLES LIKE 'OperadoraUsers'"
     );
 
     if (tables.length === 0) {
-      console.log('🔧 Tabela OperadoraUsers não existe. Criando...');
-      
       // Criar a tabela
       await connection.execute(`
         CREATE TABLE IF NOT EXISTS OperadoraUsers (
@@ -48,13 +44,11 @@ async function checkAndCreateTable() {
           INDEX idx_role (role)
         )
       `);
-      
-      console.log('✅ Tabela OperadoraUsers criada com sucesso');
-      
+
       // Inserir usuário admin de exemplo
       const bcrypt = require('bcryptjs');
       const hashedPassword = await bcrypt.hash('admin123', 10);
-      
+
       await connection.execute(`
         INSERT INTO OperadoraUsers (nome, email, username, password, operadora_id, role, status) 
         VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -67,13 +61,7 @@ async function checkAndCreateTable() {
         'operadora_admin',
         'ativo'
       ]);
-      
-      console.log('✅ Usuário admin de exemplo criado');
-      
-    } else {
-      console.log('✅ Tabela OperadoraUsers já existe');
-    }
-
+    } else {}
   } catch (error) {
     console.error('❌ Erro:', error);
   } finally {

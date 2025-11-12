@@ -94,45 +94,18 @@ const formatMedicamentosManuais = (medicamentosString) => {
 
 async function testParsingMedicamentos() {
   try {
-    console.log('🧪 Testando parsing de medicamentos...\n');
-    
     // Teste 1: Medicamentos com formato padrão
     const medicamentos1 = "Doxorrubicina 60 mg/m² EV D1 único; Ciclofosfamida 600 mg/m² EV D1 único; Paclitaxel 175 mg/m² EV D1 único";
-    console.log('📋 Teste 1 - Medicamentos com formato padrão:');
-    console.log('Original:', medicamentos1);
-    console.log('Formatado:');
-    console.log(formatMedicamentosManuais(medicamentos1));
-    console.log('');
-    
+
     // Teste 2: Medicamentos com formato compacto
     const medicamentos2 = "Oxaliplatina 85mg/m² EV D1 único; Leucovorina 400mg/m² EV D1,D2 1x";
-    console.log('📋 Teste 2 - Medicamentos com formato compacto:');
-    console.log('Original:', medicamentos2);
-    console.log('Formatado:');
-    console.log(formatMedicamentosManuais(medicamentos2));
-    console.log('');
-    
+
     // Teste 3: Medicamentos com formato complexo
     const medicamentos3 = "Carboplatina AUC6 EV D1 único; Paclitaxel 175mg/m² EV D1 único";
-    console.log('📋 Teste 3 - Medicamentos com formato complexo:');
-    console.log('Original:', medicamentos3);
-    console.log('Formatado:');
-    console.log(formatMedicamentosManuais(medicamentos3));
-    console.log('');
-    
+
     // Teste 4: Medicamentos com formato simples
     const medicamentos4 = "Teste 01 100mg VO D1,D7,D12,D15,D21,D25,D28,D30,D32,D69 2x; Teste 01 200mg IM D8-D20 3x";
-    console.log('📋 Teste 4 - Medicamentos com formato simples:');
-    console.log('Original:', medicamentos4);
-    console.log('Formatado:');
-    console.log(formatMedicamentosManuais(medicamentos4));
-    console.log('');
-    
-    console.log('✅ Testes de parsing concluídos!');
-    
-    // Agora testar no PDF
-    console.log('\n📄 Testando no PDF...');
-    
+
     const dadosSolicitacao = {
       clinica_id: 1,
       hospital_nome: 'Clínica Teste Parsing',
@@ -160,34 +133,20 @@ async function testParsingMedicamentos() {
       dias_aplicacao_intervalo: 'D1 a cada 21 dias',
       medico_assinatura_crm: 'CRM 123456/SP'
     };
-    
-    console.log('📤 Criando solicitação de teste...');
+
     const createResponse = await axios.post(`${API_BASE_URL}/solicitacoes`, dadosSolicitacao);
-    
+
     if (createResponse.data.success) {
       const solicitacaoId = createResponse.data.data.id;
-      console.log('✅ Solicitação criada com ID:', solicitacaoId);
-      
-      // Gerar PDF
-      console.log('📄 Gerando PDF...');
       const pdfResponse = await axios.get(`${API_BASE_URL}/solicitacoes/${solicitacaoId}/pdf`, {
         responseType: 'arraybuffer'
       });
-      
-      console.log('✅ PDF gerado com sucesso!');
-      console.log('📏 Tamanho do PDF:', (pdfResponse.data.length / 1024).toFixed(2), 'KB');
-      
+
       // Salvar PDF para verificação
       const fs = require('fs');
       const fileName = `teste-parsing-medicamentos-${solicitacaoId}.pdf`;
       fs.writeFileSync(fileName, pdfResponse.data);
-      console.log('💾 PDF salvo como:', fileName);
-      console.log('👀 Abra o arquivo para verificar se os medicamentos aparecem em formato tabular estruturado');
-      
-    } else {
-      console.log('❌ Erro ao criar solicitação:', createResponse.data.message);
-    }
-    
+    } else {}
   } catch (error) {
     console.error('❌ Erro no teste:', {
       message: error.message,

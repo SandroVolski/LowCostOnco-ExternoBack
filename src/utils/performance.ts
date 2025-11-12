@@ -167,15 +167,14 @@ export const diagnosePerformanceIssues = () => {
 export const cleanupOldMetrics = () => {
   const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
   let deletedCount = 0;
-  
+
   for (const [key, value] of performanceStore.entries()) {
     if (value.startTime < oneDayAgo) {
       performanceStore.delete(key);
       deletedCount++;
     }
   }
-  
-  console.log(`🧹 Limpeza de métricas: ${deletedCount} registros removidos`);
+
   return deletedCount;
 };
 

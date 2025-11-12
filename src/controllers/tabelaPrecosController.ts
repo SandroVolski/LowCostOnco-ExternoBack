@@ -58,12 +58,7 @@ export class TabelaPrecosController {
 
       query += ` ORDER BY Tabela, Servico_Codigo LIMIT 1000`;
 
-      console.log('🔍 Buscando tabelas de preços com query:', query);
-      console.log('📋 Parâmetros:', params);
-
       const [rows] = await pool.execute<TabelaPrecoRow[]>(query, params);
-
-      console.log(`✅ ${rows.length} registros encontrados`);
 
       res.json(rows);
     } catch (error: any) {
@@ -87,13 +82,9 @@ export class TabelaPrecosController {
         ORDER BY Tabela
       `;
 
-      console.log('🔍 Buscando operadoras disponíveis');
-
       const [rows] = await pool.execute<RowDataPacket[]>(query);
 
       const operadoras = rows.map((row) => row.Tabela);
-
-      console.log(`✅ ${operadoras.length} operadoras encontradas:`, operadoras);
 
       res.json(operadoras);
     } catch (error: any) {
@@ -127,11 +118,7 @@ export class TabelaPrecosController {
         ORDER BY Tabela
       `;
 
-      console.log(`🔍 Buscando detalhes do código: ${codigo}`);
-
       const [rows] = await pool.execute<TabelaPrecoRow[]>(query, [codigo]);
-
-      console.log(`✅ ${rows.length} registros encontrados para código ${codigo}`);
 
       res.json(rows);
     } catch (error: any) {

@@ -51,7 +51,6 @@ export const rateLimit = (maxRequests: number = MAX_REQUESTS_PER_WINDOW) => {
       current.count++;
       
       if (current.count > maxRequests) {
-        console.log(`🚫 Rate limit excedido para IP: ${clientIP}`);
         return res.status(429).json({
           success: false,
           message: 'Muitas requisições. Tente novamente em alguns minutos.',
@@ -96,7 +95,6 @@ export const getRateLimitStats = () => {
 export const resetRateLimit = (ip: string): boolean => {
   const keys = Array.from(rateLimitStore.keys()).filter(key => key.startsWith(ip));
   keys.forEach(key => rateLimitStore.delete(key));
-  
-  console.log(`🔄 Rate limit resetado para IP: ${ip}`);
+
   return keys.length > 0;
 }; 

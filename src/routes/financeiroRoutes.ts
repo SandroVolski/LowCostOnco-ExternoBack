@@ -28,11 +28,9 @@ const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCa
     file.mimetype === ''; // Alguns navegadores não detectam o MIME type corretamente
 
   if (isValidXML) {
-    console.log(`✅ Arquivo XML aceito: ${file.originalname} (${file.mimetype})`);
-    cb(null, true);
+   cb(null, true);
   } else {
-    console.log(`❌ Arquivo rejeitado: ${file.originalname} (${file.mimetype})`);
-    cb(new Error('Apenas arquivos XML são permitidos'));
+   cb(new Error('Apenas arquivos XML são permitidos'));
   }
 };
 

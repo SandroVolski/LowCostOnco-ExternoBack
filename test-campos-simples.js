@@ -5,8 +5,6 @@ const API_BASE_URL = 'http://localhost:3001/api';
 
 async function testCamposSimples() {
   try {
-    console.log('🧪 Testando campos específicos (versão simples)...\n');
-    
     const dadosSolicitacao = {
       clinica_id: 1,
       hospital_nome: 'Clínica Teste',
@@ -55,46 +53,20 @@ async function testCamposSimples() {
       
       medico_assinatura_crm: 'CRM 123456/SP'
     };
-    
-    console.log('📤 Criando solicitação de teste...');
+
     const createResponse = await axios.post(`${API_BASE_URL}/solicitacoes`, dadosSolicitacao);
-    
+
     if (createResponse.data.success) {
       const solicitacaoId = createResponse.data.data.id;
-      console.log('✅ Solicitação criada com ID:', solicitacaoId);
-      
-      // Gerar PDF
-      console.log('📄 Gerando PDF...');
       const pdfResponse = await axios.get(`${API_BASE_URL}/solicitacoes/${solicitacaoId}/pdf`, {
         responseType: 'arraybuffer'
       });
-      
-      console.log('✅ PDF gerado com sucesso!');
-      console.log('📏 Tamanho do PDF:', (pdfResponse.data.length / 1024).toFixed(2), 'KB');
-      
+
       // Salvar PDF para verificação
       const fs = require('fs');
       const fileName = `teste-campos-simples-${solicitacaoId}.pdf`;
       fs.writeFileSync(fileName, pdfResponse.data);
-      console.log('💾 PDF salvo como:', fileName);
-      
-      console.log('\n📋 Campos específicos testados:');
-      console.log('✅ Seção 2 - LOCALIZAÇÃO DE METÁSTASES:');
-      console.log('   • Valor: "Fígado, pulmão e ossos"');
-      console.log('   • Deve aparecer na Seção 2 do PDF');
-      console.log('');
-      console.log('✅ Seção 6 - MEDICAÇÕES COADJUVANTES E SUPORTE:');
-      console.log('   • Ondansetrona 8mg EV 30min antes da quimioterapia');
-      console.log('   • Dexametasona 8mg EV 30min antes da quimioterapia');
-      console.log('   • Metoclopramida 10mg VO 3x/dia por 3 dias');
-      console.log('   • Deve aparecer na Seção 6 do PDF');
-      console.log('');
-      console.log('👀 Abra o arquivo PDF para verificar se os campos aparecem corretamente');
-      
-    } else {
-      console.log('❌ Erro ao criar solicitação:', createResponse.data.message);
-    }
-    
+    } else {}
   } catch (error) {
     console.error('❌ Erro no teste:', {
       message: error.message,

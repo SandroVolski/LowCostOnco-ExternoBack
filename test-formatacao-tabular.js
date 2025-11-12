@@ -52,37 +52,15 @@ const formatMedicamentosManuais = (medicamentosString) => {
 
 async function testFormatacaoTabular() {
   try {
-    console.log('🧪 Testando formatação tabular de medicamentos...\n');
-    
     // Teste 1: Medicamentos com formato estruturado
     const medicamentos1 = "Doxorrubicina 60mg/m² EV D1 único; Ciclofosfamida 600mg/m² EV D1 único; Paclitaxel 175mg/m² EV D1 único";
-    console.log('📋 Teste 1 - Medicamentos estruturados:');
-    console.log('Original:', medicamentos1);
-    console.log('Formatado:');
-    console.log(formatMedicamentosManuais(medicamentos1));
-    console.log('');
-    
+
     // Teste 2: Medicamentos com formato simples
     const medicamentos2 = "Oxaliplatina 85mg/m² EV D1 único; Leucovorina 400mg/m² EV D1,D2 1x";
-    console.log('📋 Teste 2 - Medicamentos simples:');
-    console.log('Original:', medicamentos2);
-    console.log('Formatado:');
-    console.log(formatMedicamentosManuais(medicamentos2));
-    console.log('');
-    
+
     // Teste 3: Medicamentos com observações
     const medicamentos3 = "Carboplatina AUC6 EV D1 único; Paclitaxel 175mg/m² EV D1 único";
-    console.log('📋 Teste 3 - Medicamentos com observações:');
-    console.log('Original:', medicamentos3);
-    console.log('Formatado:');
-    console.log(formatMedicamentosManuais(medicamentos3));
-    console.log('');
-    
-    console.log('✅ Testes de formatação tabular concluídos!');
-    
-    // Agora testar no PDF
-    console.log('\n📄 Testando no PDF...');
-    
+
     const dadosSolicitacao = {
       clinica_id: 1,
       hospital_nome: 'Clínica Teste Tabular',
@@ -110,48 +88,20 @@ async function testFormatacaoTabular() {
       dias_aplicacao_intervalo: 'D1 a cada 21 dias',
       medico_assinatura_crm: 'CRM 123456/SP'
     };
-    
-    console.log('📤 Criando solicitação de teste...');
+
     const createResponse = await axios.post(`${API_BASE_URL}/solicitacoes`, dadosSolicitacao);
-    
+
     if (createResponse.data.success) {
       const solicitacaoId = createResponse.data.data.id;
-      console.log('✅ Solicitação criada com ID:', solicitacaoId);
-      
-      // Gerar PDF
-      console.log('📄 Gerando PDF...');
       const pdfResponse = await axios.get(`${API_BASE_URL}/solicitacoes/${solicitacaoId}/pdf`, {
         responseType: 'arraybuffer'
       });
-      
-      console.log('✅ PDF gerado com sucesso!');
-      console.log('📏 Tamanho do PDF:', (pdfResponse.data.length / 1024).toFixed(2), 'KB');
-      
+
       // Salvar PDF para verificação
       const fs = require('fs');
       const fileName = `teste-formatacao-tabular-${solicitacaoId}.pdf`;
       fs.writeFileSync(fileName, pdfResponse.data);
-      console.log('💾 PDF salvo como:', fileName);
-      console.log('👀 Abra o arquivo para verificar se os medicamentos aparecem em formato tabular');
-      console.log('📋 Esperado:');
-      console.log('MEDICAMENTO 1:');
-      console.log('• Nome: Doxorrubicina');
-      console.log('• Dose: 60mg/m²');
-      console.log('• Via de Administração: EV');
-      console.log('• Dias de Administração: D1');
-      console.log('• Frequência: único');
-      console.log('');
-      console.log('MEDICAMENTO 2:');
-      console.log('• Nome: Ciclofosfamida');
-      console.log('• Dose: 600mg/m²');
-      console.log('• Via de Administração: EV');
-      console.log('• Dias de Administração: D1');
-      console.log('• Frequência: único');
-      
-    } else {
-      console.log('❌ Erro ao criar solicitação:', createResponse.data.message);
-    }
-    
+    } else {}
   } catch (error) {
     console.error('❌ Erro no teste:', {
       message: error.message,

@@ -12,20 +12,16 @@ export class ChatOnkhosController {
       const user = (req as any).user;
       const userId = user.id;
       const userType = user.tipo === 'operadora' ? 'operadora' : 'clinica';
-      
-      console.log('🔧 Buscando chats para usuário:', { userId, userType });
-      
+
       let chats;
-      
+
       if (userType === 'operadora') {
         // Para operadoras, buscar clínicas credenciadas com conversas
         chats = await ChatOnkhosModel.getClinicasCredenciadas(userId);
       } else {
         chats = await ChatOnkhosModel.getConversasClinica(userId);
       }
-      
-      console.log('🔧 Chats encontrados:', chats);
-      
+
       res.json({
         success: true,
         data: chats
@@ -97,7 +93,7 @@ export class ChatOnkhosController {
       const offset = parseInt(req.query.offset as string) || 0;
       const lastId = req.query.last_id ? parseInt(req.query.last_id as string) : undefined;
       const user = (req as any).user;
-      
+
       if (isNaN(chatId)) {
         res.status(400).json({
           success: false,
@@ -105,7 +101,7 @@ export class ChatOnkhosController {
         });
         return;
       }
-      
+
       // Verificar se o usuário tem acesso ao chat
       const chat = await ChatOnkhosModel.getConversaById(chatId);
       if (!chat) {
@@ -115,11 +111,11 @@ export class ChatOnkhosController {
         });
         return;
       }
-      
+
       const userType = user.tipo === 'operadora' ? 'operadora' : 'clinica';
       const hasAccess = (userType === 'operadora' && chat.operadora_id === user.id) ||
                        (userType === 'clinica' && chat.clinica_id === user.id);
-      
+
       if (!hasAccess) {
         res.status(403).json({
           success: false,
@@ -127,7 +123,7 @@ export class ChatOnkhosController {
         });
         return;
       }
-      
+
       let messages: any[] = [];
       if (lastId && lastId > 0) {
         // Polling incremental: buscar somente novas mensagens após last_id
@@ -140,15 +136,12 @@ export class ChatOnkhosController {
         // Paginação convencional
         messages = await ChatOnkhosModel.getMensagensConversa(chatId, limit, offset);
       }
-      
-      console.log('🔧 [CONTROLLER] Mensagens retornadas:', messages.length);
-      if (messages.length > 0) {
-        console.log('📨 [CONTROLLER] Primeira mensagem:', JSON.stringify(messages[0], null, 2));
-      }
-      
+
+      if (messages.length > 0) {}
+
       // Marcar chat como lido
       await ChatOnkhosModel.marcarComoLida(chatId, user.id, userType);
-      
+
       const response = {
         success: true,
         data: {
@@ -161,9 +154,7 @@ export class ChatOnkhosController {
           }
         }
       };
-      
-      console.log('🔧 [CONTROLLER] Resposta final:', JSON.stringify(response, null, 2));
-      
+
       res.json(response);
     } catch (error) {
       console.error('❌ Erro ao buscar mensagens:', error);
@@ -180,9 +171,7 @@ export class ChatOnkhosController {
       const chatId = parseInt(req.params.id);
       const user = (req as any).user;
       const { content, message_type = 'texto' } = req.body;
-      
-      console.log('🔧 Enviando mensagem:', { chatId, user: user.id, content: content?.substring(0, 50) });
-      
+
       if (isNaN(chatId)) {
         res.status(400).json({
           success: false,
@@ -190,7 +179,7 @@ export class ChatOnkhosController {
         });
         return;
       }
-      
+
       if (!content || content.trim().length === 0) {
         res.status(400).json({
           success: false,
@@ -198,7 +187,7 @@ export class ChatOnkhosController {
         });
         return;
       }
-      
+
       // Verificar se o usuário tem acesso ao chat
       const chat = await ChatOnkhosModel.getConversaById(chatId);
       if (!chat) {
@@ -208,11 +197,11 @@ export class ChatOnkhosController {
         });
         return;
       }
-      
+
       const userType = user.tipo === 'operadora' ? 'operadora' : 'clinica';
       const hasAccess = (userType === 'operadora' && chat.operadora_id === user.id) ||
                        (userType === 'clinica' && chat.clinica_id === user.id);
-      
+
       if (!hasAccess) {
         res.status(403).json({
           success: false,
@@ -220,16 +209,16 @@ export class ChatOnkhosController {
         });
         return;
       }
-      
+
       // Buscar nome do remetente
       let senderName = user.nome || user.username || 'Usuário';
-      
+
       // Normalizar tipo de mensagem
       let normalizedMessageType = message_type;
       if (message_type === 'text') {
         normalizedMessageType = 'texto';
       }
-      
+
       const messageData = {
         conversa_id: chatId,
         remetente_id: user.id,
@@ -238,20 +227,14 @@ export class ChatOnkhosController {
         conteudo: content.trim(),
         tipo_mensagem: normalizedMessageType as 'texto' | 'imagem' | 'arquivo'
       };
-      
-      console.log('🔧 Dados da mensagem:', messageData);
-      console.log('🔧 Chamando ChatOnkhosModel.criarMensagem...');
-      
+
       const message = await ChatOnkhosModel.criarMensagem(messageData);
-      console.log('🔧 Mensagem criada:', message);
-      
+
       // Atualizar última mensagem da conversa
       if (message.id) {
         await ChatOnkhosModel.atualizarUltimaMensagem(chatId, message.id, content.trim());
       }
-      
-      console.log('✅ Mensagem enviada com sucesso:', message.id);
-      
+
       res.status(201).json({
         success: true,
         data: message,
@@ -443,14 +426,7 @@ export class ChatOnkhosController {
     try {
       const user = (req as any).user;
       const { targetUserId, targetUserType } = req.body;
-      
-      console.log('🔧 Procurando/criando conversa:', { 
-        userId: user.id, 
-        userType: user.tipo,
-        targetUserId, 
-        targetUserType 
-      });
-      
+
       if (!targetUserId || !targetUserType) {
         res.status(400).json({
           success: false,
@@ -458,10 +434,10 @@ export class ChatOnkhosController {
         });
         return;
       }
-      
+
       let operadoraId: number;
       let clinicaId: number;
-      
+
       // Determinar quem é operadora e quem é clínica
       if (user.tipo === 'operadora') {
         operadoraId = user.id;
@@ -476,9 +452,9 @@ export class ChatOnkhosController {
         });
         return;
       }
-      
+
       const conversa = await ChatOnkhosModel.findOrCreateOperadoraClinicaChat(operadoraId, clinicaId);
-      
+
       res.status(200).json({
         success: true,
         data: conversa,
@@ -500,9 +476,7 @@ export class ChatOnkhosController {
       const chatId = parseInt(req.params.id);
       const user = (req as any).user;
       const file = req.file;
-      
-      console.log('🔧 Upload de arquivo:', { chatId, user: user.id, file: file?.originalname });
-      
+
       if (isNaN(chatId)) {
         res.status(400).json({
           success: false,
@@ -510,7 +484,7 @@ export class ChatOnkhosController {
         });
         return;
       }
-      
+
       if (!file) {
         res.status(400).json({
           success: false,
@@ -518,7 +492,7 @@ export class ChatOnkhosController {
         });
         return;
       }
-      
+
       // Verificar se o usuário tem acesso ao chat
       const chat = await ChatOnkhosModel.getConversaById(chatId);
       if (!chat) {
@@ -528,11 +502,11 @@ export class ChatOnkhosController {
         });
         return;
       }
-      
+
       const userType = user.tipo === 'operadora' ? 'operadora' : 'clinica';
       const hasAccess = (userType === 'operadora' && chat.operadora_id === user.id) ||
                        (userType === 'clinica' && chat.clinica_id === user.id);
-      
+
       if (!hasAccess) {
         res.status(403).json({
           success: false,
@@ -540,22 +514,22 @@ export class ChatOnkhosController {
         });
         return;
       }
-      
+
       // Buscar nome do remetente
       let senderName = user.nome || user.username || 'Usuário';
-      
+
       // Determinar tipo de mensagem baseado no tipo do arquivo
       let messageType: 'imagem' | 'arquivo' = 'arquivo';
       if (file.mimetype.startsWith('image/')) {
         messageType = 'imagem';
       }
-      
+
       // Criar URL do arquivo (relativa para funcionar com proxy do Vite)
       const fileUrl = `/uploads/chat/${file.filename}`;
-      
+
       // Criar conteúdo da mensagem com informações do arquivo
       const content = `${file.originalname}|${fileUrl}|${file.mimetype}|${file.size}`;
-      
+
       const messageData = {
         conversa_id: chatId,
         remetente_id: user.id,
@@ -564,20 +538,14 @@ export class ChatOnkhosController {
         conteudo: content,
         tipo_mensagem: messageType
       };
-      
-      console.log('🔧 Dados da mensagem com arquivo:', messageData);
-      console.log('🔧 Chamando ChatOnkhosModel.criarMensagem...');
-      
+
       const message = await ChatOnkhosModel.criarMensagem(messageData);
-      console.log('🔧 Mensagem com arquivo criada:', message);
-      
+
       // Atualizar última mensagem da conversa
       if (message.id) {
         await ChatOnkhosModel.atualizarUltimaMensagem(chatId, message.id, `📎 ${file.originalname}`);
       }
-      
-      console.log('✅ Arquivo enviado com sucesso:', message.id);
-      
+
       res.status(201).json({
         success: true,
         data: {

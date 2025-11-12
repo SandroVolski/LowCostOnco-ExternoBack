@@ -12,8 +12,6 @@ import { query } from '../config/database';
 // Buscar métricas gerais do sistema
 export const getSystemMetrics = async (req: Request, res: Response) => {
   try {
-    console.log('🔧 AdminController.getSystemMetrics() iniciado');
-    
     // Helper para tornar consultas resilientes (não derrubar tudo em caso de falha)
     const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
       try { return await fn(); } catch (e) { console.error('⚠️ Falha parcial em getSystemMetrics:', e); return fallback; }
@@ -76,8 +74,6 @@ export const getSystemMetrics = async (req: Request, res: Response) => {
       operadorasAtivas
     };
 
-    console.log('✅ Métricas administrativas calculadas:', metrics);
-
     res.json({
       success: true,
       data: metrics
@@ -94,7 +90,6 @@ export const getSystemMetrics = async (req: Request, res: Response) => {
 // Buscar informações das operadoras
 export const getOperadorasInfo = async (req: Request, res: Response) => {
   try {
-    console.log('🔧 AdminController.getOperadorasInfo() iniciado');
     // Helper resiliente
     const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
       try { return await fn(); } catch (e) { console.error('⚠️ Falha parcial em getOperadorasInfo:', e); return fallback; }
@@ -125,8 +120,6 @@ export const getOperadorasInfo = async (req: Request, res: Response) => {
       })
     );
 
-    console.log('✅ Informações das operadoras obtidas:', operadorasInfo.length);
-
     res.json({
       success: true,
       data: operadorasInfo
@@ -143,21 +136,15 @@ export const getOperadorasInfo = async (req: Request, res: Response) => {
 // Buscar informações das clínicas (otimizado para grandes volumes)
 export const getClinicasInfo = async (req: Request, res: Response) => {
   try {
-    console.log('🔧 AdminController.getClinicasInfo() iniciado');
-    
     // Parâmetros de paginação
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 100; // Limite maior para admin
     const offset = (page - 1) * limit;
-    
-    console.log(`🔧 Paginação: página ${page}, limite ${limit}, offset ${offset}`);
-    
+
     // Buscar apenas uma amostra de clínicas com paginação
     const clinicas = await query(
       `SELECT id, nome, operadora_id, status FROM clinicas ORDER BY nome ASC LIMIT ${Number(limit)} OFFSET ${Number(offset)}`
     );
-    
-    console.log(`✅ Clínicas encontradas: ${clinicas.length}`);
 
     // Para performance, retornar dados básicos sem queries adicionais pesadas
     const clinicasInfo = clinicas.map((clinica: any) => ({
@@ -175,8 +162,6 @@ export const getClinicasInfo = async (req: Request, res: Response) => {
     // Buscar total para paginação
     const totalResult = await query('SELECT COUNT(*) as total FROM clinicas');
     const total = totalResult[0]?.total || 0;
-
-    console.log(`✅ Informações das clínicas obtidas: ${clinicasInfo.length}/${total}`);
 
     res.json({
       success: true,
@@ -202,8 +187,6 @@ export const getClinicasInfo = async (req: Request, res: Response) => {
 // Buscar dados dos gráficos administrativos (otimizado para performance)
 export const getChartsData = async (req: Request, res: Response) => {
   try {
-    console.log('🔧 AdminController.getChartsData() iniciado');
-    
     // Retornar dados vazios para evitar queries pesadas com 24k clínicas
     const chartsData = {
       chartData: [], // Dados de solicitações por mês
@@ -211,8 +194,6 @@ export const getChartsData = async (req: Request, res: Response) => {
       performanceData: [], // Dados de performance por operadora
       trendData: [] // Dados de tendência
     };
-
-    console.log('✅ Dados dos gráficos administrativos obtidos (dados vazios para performance)');
 
     res.json({
       success: true,

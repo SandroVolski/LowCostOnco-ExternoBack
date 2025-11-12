@@ -69,28 +69,23 @@ export class OperadoraModel {
           nome, codigo, cnpj, status, created_at, updated_at
         ) VALUES (?, ?, ?, ?, NOW(), NOW())
       `;
-      
+
       const values = [
         operadoraData.nome,
         operadoraData.codigo,
         operadoraData.cnpj || null,
         operadoraData.status || 'ativo'
       ];
-      
-      console.log('🔧 Criando nova operadora...');
-      console.log('📋 Dados preparados:', operadoraData);
-      
+
       const result = await query(insertQuery, values);
       const insertId = result.insertId;
-      
-      console.log('✅ Operadora criada com ID:', insertId);
-      
+
       // Buscar a operadora recém-criada
       const novaOperadora = await this.findById(insertId);
       if (!novaOperadora) {
         throw new Error('Erro ao buscar operadora recém-criada');
       }
-      
+
       return novaOperadora;
     } catch (error) {
       console.warn('⚠️ Erro ao conectar com banco, usando dados mock:', error instanceof Error ? error.message : String(error));
@@ -116,40 +111,34 @@ export class OperadoraModel {
       // Construir query dinâmica baseada nos campos fornecidos
       const updateFields: string[] = [];
       const values: any[] = [];
-      
+
       Object.entries(operadoraData).forEach(([key, value]) => {
         if (value !== undefined) {
           updateFields.push(`${key} = ?`);
           values.push(value);
         }
       });
-      
+
       if (updateFields.length === 0) {
         throw new Error('Nenhum campo para atualizar');
       }
-      
+
       // Não incluir updated_at se a coluna não existir
       // updateFields.push('updated_at = CURRENT_TIMESTAMP');
       values.push(id);
-      
+
       const updateQuery = `
         UPDATE operadoras 
         SET ${updateFields.join(', ')}
         WHERE id = ?
       `;
-      
-      console.log('🔧 Atualizando operadora ID:', id);
-      console.log('📋 Campos a atualizar:', updateFields);
-      console.log('📋 Valores:', values);
-      
+
       const result = await query(updateQuery, values);
-      
+
       if (result.affectedRows === 0) {
         return null; // Operadora não encontrada
       }
-      
-      console.log('✅ Operadora atualizada com sucesso');
-      
+
       // Buscar a operadora atualizada
       return await this.findById(id);
     } catch (error) {
@@ -194,18 +183,13 @@ export class OperadoraModel {
   // Buscar todas as operadoras
   static async findAll(): Promise<Operadora[]> {
     try {
-      console.log('🔧 Tentando conectar com banco real...');
-      
       const selectQuery = `
         SELECT * FROM operadoras 
         ORDER BY nome ASC
       `;
-      
-      console.log('🔧 Executando query:', selectQuery);
+
       const result = await query(selectQuery);
-      
-      console.log(`✅ ${result.length} operadoras encontradas no banco real`);
-      
+
       return result;
     } catch (error) {
       console.error('❌ ERRO DETALHADO ao conectar com banco:', {

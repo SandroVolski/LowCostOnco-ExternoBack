@@ -80,15 +80,7 @@ export class SolicitacaoController {
     try {
       const dadosSolicitacao: SolicitacaoCreateInput = req.body;
       const clinicaId = req.user?.clinicaId || req.user?.id || null;
-      
-      // Log para debug do paciente_id
-      console.log('🔧 Dados recebidos para criação:', {
-        paciente_id: dadosSolicitacao.paciente_id,
-        tipo_paciente_id: typeof dadosSolicitacao.paciente_id,
-        clinica_id: dadosSolicitacao.clinica_id,
-        cliente_nome: dadosSolicitacao.cliente_nome
-      });
-      
+
       // Validações básicas
       if (!dadosSolicitacao.hospital_nome || !dadosSolicitacao.cliente_nome || 
           !dadosSolicitacao.diagnostico_cid || !dadosSolicitacao.medicamentos_antineoplasticos) {
@@ -99,12 +91,12 @@ export class SolicitacaoController {
         res.status(400).json(response);
         return;
       }
-      
+
       // Garantir que a data de solicitação seja hoje se não fornecida
       if (!dadosSolicitacao.data_solicitacao) {
         dadosSolicitacao.data_solicitacao = new Date().toISOString().split('T')[0];
       }
-      
+
       if (!clinicaId) {
         const response: ApiResponse = { success: false, message: 'Clínica não identificada no token' };
         res.status(401).json(response);
@@ -112,7 +104,7 @@ export class SolicitacaoController {
       }
       // Forçar clinica_id do token
       (dadosSolicitacao as any).clinica_id = clinicaId;
-      
+
       // Tratar paciente_id - converter para número ou null
       if (dadosSolicitacao.paciente_id !== undefined && dadosSolicitacao.paciente_id !== null) {
         const pacienteId = parseInt(dadosSolicitacao.paciente_id.toString());
@@ -120,20 +112,15 @@ export class SolicitacaoController {
       } else {
         dadosSolicitacao.paciente_id = null;
       }
-      
-      console.log('🔧 Dados tratados:', {
-        paciente_id: dadosSolicitacao.paciente_id,
-        tipo_paciente_id: typeof dadosSolicitacao.paciente_id
-      });
-      
+
       const novaSolicitacao = await SolicitacaoAutorizacaoModel.create(dadosSolicitacao);
-      
+
       const response: ApiResponse = {
         success: true,
         message: 'Solicitação criada com sucesso',
         data: SolicitacaoController.flattenSolicitacao(novaSolicitacao as any)
       };
-      
+
       res.status(201).json(response);
     } catch (error) {
       console.error('Erro ao criar solicitação:', error);
@@ -248,13 +235,7 @@ export class SolicitacaoController {
       const id = parseInt(req.params.id);
       const isView = req.query.view === 'true';  // 🆕 Parâmetro para visualização
       const isInline = req.query.inline === 'true';  // 🆕 Parâmetro para inline
-      
-      console.log('🔧 generatePDF - Iniciando geração de PDF para solicitação:', id);
-      console.log('🔧 generatePDF - User no request:', req.user);
-      console.log('🔧 generatePDF - Headers authorization:', req.headers.authorization);
-      console.log('📋 Modo:', isView ? 'Visualização' : 'Download');
-      console.log('📋 Inline:', isInline ? 'Sim' : 'Não');
-      
+
       if (isNaN(id)) {
         const response: ApiResponse = {
           success: false,
@@ -263,30 +244,27 @@ export class SolicitacaoController {
         res.status(400).json(response);
         return;
       }
-      
+
       // 🆕 CACHE PARA PDFs - Verificar se já existe em cache
       const cacheKey = `pdf_${id}_${isView ? 'view' : 'download'}`;
       const cachedPdf = global.pdfCache?.get(cacheKey);
-      
-      if (cachedPdf && !isView) { // Cache apenas para download, não para visualização
-        console.log('📦 PDF encontrado em cache, enviando diretamente...');
-        
+
+      if (cachedPdf && !isView) {
         const fileName = `autorizacao_tratamento_${id}_${new Date().toISOString().split('T')[0]}.pdf`;
-        
+
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Length', cachedPdf.length);
         res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
         res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache por 1 hora
         res.setHeader('ETag', `"${id}_${cachedPdf.length}"`);
-        
+
         res.send(cachedPdf);
-        console.log('✅ PDF enviado do cache! Tamanho:', (cachedPdf.length / 1024).toFixed(2), 'KB');
         return;
       }
-      
+
       // Buscar a solicitação
       const solicitacaoRaw = await SolicitacaoAutorizacaoModel.findById(id);
-      
+
       if (!solicitacaoRaw) {
         const response: ApiResponse = {
           success: false,
@@ -297,88 +275,64 @@ export class SolicitacaoController {
       }
       // Achatar campos JSON para compatibilidade com o template do PDF
       const solicitacao = SolicitacaoController.flattenSolicitacao(solicitacaoRaw as any) as any;
-      
-      console.log('✅ Solicitação encontrada:', {
-        id: solicitacao.id,
-        clinica_id: solicitacao.clinica_id,
-        cliente: solicitacao.cliente_nome
-      });
-      
+
       // ✅ BUSCAR DADOS DA CLÍNICA E LOGO
       let clinicLogo = '';
       try {
-        console.log('🔧 Buscando dados da clínica ID:', solicitacao.clinica_id);
         const clinicProfile = await ClinicaModel.findById(solicitacao.clinica_id);
-        
+
         if (clinicProfile?.clinica?.logo_url) {
           clinicLogo = clinicProfile.clinica.logo_url;
-          console.log('✅ Logo da clínica encontrada:', clinicLogo.substring(0, 50) + '...');
-        } else {
-          console.log('⚠️  Logo da clínica não encontrada');
-        }
+        } else {}
       } catch (logoError) {
         console.warn('⚠️  Erro ao buscar logo da clínica:', logoError);
         // Continua sem a logo
       }
-      
-      // ✅ GERAR O PDF COM LOGO
-      console.log('🎨 Gerando PDF moderno...');
+
       const startTime = Date.now();
       const pdfBuffer = await generateAuthorizationPDF(solicitacao, clinicLogo);
       const generationTime = Date.now() - startTime;
-      
-      console.log(`⏱️  Tempo de geração: ${generationTime}ms`);
-      
+
       // 🆕 ARMAZENAR NO CACHE (apenas para download)
       if (!isView && !global.pdfCache) {
         global.pdfCache = new Map();
       }
       if (!isView && global.pdfCache) {
         global.pdfCache.set(cacheKey, pdfBuffer);
-        console.log('💾 PDF armazenado no cache');
       }
-      
+
       // 🆕 CONFIGURAR HEADERS BASEADO NO MODO
       const fileName = `autorizacao_tratamento_${id}_${new Date().toISOString().split('T')[0]}.pdf`;
-      
+
       // Headers básicos
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Length', pdfBuffer.length);
-      
+
       // 🆕 CONFIGURAR MODO DE EXIBIÇÃO COM OTIMIZAÇÕES
       if (isView || isInline) {
         // Para visualização inline no browser - OTIMIZADO
         res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
         res.setHeader('Cache-Control', 'public, max-age=1800'); // Cache por 30 minutos
         res.setHeader('ETag', `"${id}_view_${pdfBuffer.length}"`);
-        
+
         // ✅ CORREÇÃO: Remover headers CSP problemáticos para iframe
         res.removeHeader('X-Frame-Options');
         res.removeHeader('Content-Security-Policy');
         res.removeHeader('X-Content-Type-Options');
-        
+
         // 🆕 Headers otimizados para visualização rápida
         res.setHeader('Accept-Ranges', 'bytes');
         res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
         res.setHeader('Referrer-Policy', 'no-referrer');
-        
-        console.log('👁️  Configurado para visualização inline (otimizado)');
       } else {
         // Para download tradicional - OTIMIZADO
         res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
         res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache por 1 hora
         res.setHeader('ETag', `"${id}_download_${pdfBuffer.length}"`);
-        
-        console.log('💾 Configurado para download (otimizado)');
       }
-      
+
       // Enviar o PDF
       res.send(pdfBuffer);
-      
-      console.log('✅ PDF enviado com sucesso! Tamanho:', (pdfBuffer.length / 1024).toFixed(2), 'KB');
-      console.log('📋 Modo final:', isView ? 'Visualização' : 'Download');
-      console.log(`⏱️  Tempo total: ${Date.now() - startTime}ms`);
-      
     } catch (error) {
       console.error('❌ Erro ao gerar PDF:', error);
       const response: ApiResponse = {
@@ -397,15 +351,7 @@ export class SolicitacaoController {
       const dadosAtualizacao: SolicitacaoUpdateInput = req.body;
       const clinicaId = req.user?.clinicaId || req.user?.id || null;
       const userRole = req.user?.role;
-      
-      console.log('🔧 Atualizando status da solicitação:', {
-        id,
-        dadosAtualizacao,
-        clinicaId,
-        userRole,
-        userId: req.user?.id
-      });
-      
+
       if (isNaN(id)) {
         const response: ApiResponse = {
           success: false,
@@ -414,26 +360,24 @@ export class SolicitacaoController {
         res.status(400).json(response);
         return;
       }
-      
+
       const atual = await SolicitacaoAutorizacaoModel.findById(id);
       if (!atual) {
         const response: ApiResponse = { success: false, message: 'Solicitação não encontrada' };
         res.status(404).json(response);
         return;
       }
-      
+
       // Validação de acesso: operadoras podem acessar qualquer solicitação
       // Clínicas só podem acessar suas próprias solicitações
       if (userRole && !userRole.includes('operadora') && clinicaId && (atual as any).clinica_id !== clinicaId) {
-        console.log('❌ Acesso negado - clínica tentando acessar solicitação de outra clínica');
         const response: ApiResponse = { success: false, message: 'Acesso negado à solicitação' };
         res.status(403).json(response);
         return;
       }
 
-      console.log('✅ Validação de acesso aprovada, atualizando solicitação...');
       const solicitacaoAtualizada = await SolicitacaoAutorizacaoModel.updateStatus(id, dadosAtualizacao);
-      
+
       if (!solicitacaoAtualizada) {
         const response: ApiResponse = {
           success: false,
@@ -442,14 +386,13 @@ export class SolicitacaoController {
         res.status(404).json(response);
         return;
       }
-      
-      console.log('✅ Solicitação atualizada com sucesso');
+
       const response: ApiResponse = {
         success: true,
         message: 'Status da solicitação atualizado com sucesso',
         data: SolicitacaoController.flattenSolicitacao(solicitacaoAtualizada as any)
       };
-      
+
       res.json(response);
     } catch (error) {
       console.error('❌ Erro ao atualizar status da solicitação:', error);
@@ -558,17 +501,13 @@ export class SolicitacaoController {
 
       // Operadora: listar todas as solicitações das clínicas vinculadas
       if (user?.tipo === 'operadora' && user?.operadoraId) {
-        console.log('🔧 Filtrando solicitações para operadora ID:', user.operadoraId);
-        
         // Buscar solicitações filtradas por operadora_id
         const result = await SolicitacaoAutorizacaoModel.findByOperadoraId(user.operadoraId, { page, limit });
         const mapped = {
           ...result,
           data: result.data.map(r => SolicitacaoController.flattenSolicitacao(r as any))
         };
-        
-        console.log(`✅ ${result.data.length} solicitações encontradas para operadora ${user.operadoraId}`);
-        
+
         const response: ApiResponse = {
           success: true,
           message: 'Solicitações encontradas com sucesso',

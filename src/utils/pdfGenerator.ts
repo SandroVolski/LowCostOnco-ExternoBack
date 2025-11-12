@@ -116,209 +116,181 @@ const formatMedicamentosProtocolo = (protocoloMedicamentosJson?: string): string
 
 // ✅ FUNÇÃO CORRIGIDA: Formatar medicamentos manuais com espaços dedicados
 const formatMedicamentosManuais = (medicamentosString?: string): string => {
-  console.log('🔍 formatMedicamentosManuais - Iniciando...');
-  console.log('🔍 Input:', medicamentosString);
-  
-  if (!medicamentosString || medicamentosString.trim() === '') {
-    console.log('🔍 Retornando string vazia - input vazio ou nulo');
-    return '';
-  }
-  
-  try {
-    // ✅ CORREÇÃO: Primeiro separar por ponto e vírgula, depois por quebras de linha
-    let medicamentos: string[] = [];
-    
-    console.log('🔍 Separando por ponto e vírgula...');
-    // Dividir por ponto e vírgula primeiro
-    const medicamentosPorPontoVirgula = medicamentosString.split(';');
-    console.log('🔍 Medicamentos por ponto e vírgula:', medicamentosPorPontoVirgula.length);
-    
-    // Para cada parte, dividir por quebras de linha
-    medicamentosPorPontoVirgula.forEach((part: string, index: number) => {
-      console.log(`🔍 Processando parte ${index + 1}:`, part);
-      const medicamentosPorLinha = part.split('\n');
-      medicamentosPorLinha.forEach((med: string) => {
-        const medTrimmed = med.trim();
-        if (medTrimmed.length > 0) {
-          medicamentos.push(medTrimmed);
-          console.log(`🔍 Adicionado medicamento: ${medTrimmed}`);
-        }
-      });
-    });
-    
-    // Remover duplicatas e filtrar vazios
-    medicamentos = [...new Set(medicamentos)].filter((med: string) => med.length > 0);
-    
-    console.log('🔍 Medicamentos encontrados:', medicamentos.length);
-    medicamentos.forEach((med, i) => console.log(`  ${i + 1}. ${med}`));
-    
-    if (medicamentos.length === 0) {
-      console.log('🔍 Retornando string vazia - nenhum medicamento válido encontrado');
-      return '';
+    if (!medicamentosString || medicamentosString.trim() === '') {
+        return '';
     }
-    
-    // ✅ NOVA FORMATAÇÃO: Espaços dedicados para medicamentos manuais
-    console.log('🔍 Iniciando formatação de espaços dedicados...');
-    const resultado = medicamentos.map((med, index) => {
-      console.log(`🔍 Formatando medicamento ${index + 1}: ${med}`);
-      
-      // Tentar extrair informações do medicamento manual
-      const partes = med.split(' ');
-      console.log(`🔍 Partes do medicamento ${index + 1}:`, partes);
-      
-      // Padrão mais flexível para extrair informações
-      let nome = '';
-      let dose = '';
-      let unidade = '';
-      let via = '';
-      let dias = '';
-      let frequencia = '';
-      
-      if (partes.length >= 3) {
-        console.log(`🔍 Medicamento ${index + 1} tem ${partes.length} partes, tentando extrair...`);
-        
-        // Tentar extrair baseado em padrões conhecidos
-        const viaPatterns = ['EV', 'VO', 'IM', 'SC', 'IT', 'IP', 'TOP'];
-        const unidadePatterns = ['mg', 'mg/m²', 'mg/kg', 'AUC', 'UI', 'mcg', 'ml', 'g'];
-        
-        // Encontrar via de administração
-        const viaIndex = partes.findIndex(part => viaPatterns.includes(part));
-        if (viaIndex !== -1) {
-          via = partes[viaIndex];
-          console.log(`🔍 Via encontrada para medicamento ${index + 1}: ${via}`);
-          
-          // Encontrar dose (número seguido de unidade)
-          const doseRegex = /^(\d+(?:\.\d+)?)(mg|mg\/m²|mg\/kg|AUC|UI|mcg|ml|g)$/;
-          let doseIndex = -1;
-          let doseMatch = null;
-          
-          for (let i = 0; i < partes.length; i++) {
-            const match = partes[i].match(doseRegex);
-            if (match) {
-              doseIndex = i;
-              doseMatch = match;
-              break;
-            }
-          }
-          
-          if (doseIndex !== -1 && doseMatch) {
-            dose = doseMatch[1] + doseMatch[2];
-            unidade = doseMatch[2];
-            console.log(`🔍 Dose encontrada para medicamento ${index + 1}: ${dose}`);
-            
-            // Nome é tudo antes da dose
-            nome = partes.slice(0, doseIndex).join(' ');
-            console.log(`🔍 Nome extraído para medicamento ${index + 1}: ${nome}`);
-            
-            // Dias e frequência são o resto após a via
-            const restParts = partes.slice(viaIndex + 1);
-            if (restParts.length >= 2) {
-              dias = restParts[0];
-              frequencia = restParts.slice(1).join(' ');
-            } else if (restParts.length === 1) {
-              dias = restParts[0];
-              frequencia = '';
-            }
-            console.log(`🔍 Dias e frequência para medicamento ${index + 1}: ${dias}, ${frequencia}`);
-          }
+
+    try {
+        // ✅ CORREÇÃO: Primeiro separar por ponto e vírgula, depois por quebras de linha
+        let medicamentos: string[] = [];
+
+        // Dividir por ponto e vírgula primeiro
+        const medicamentosPorPontoVirgula = medicamentosString.split(';');
+
+        // Para cada parte, dividir por quebras de linha
+        medicamentosPorPontoVirgula.forEach((part: string, index: number) => {
+            const medicamentosPorLinha = part.split('\n');
+            medicamentosPorLinha.forEach((med: string) => {
+              const medTrimmed = med.trim();
+              if (medTrimmed.length > 0) {
+                  medicamentos.push(medTrimmed);
+              }
+            });
+        });
+
+        // Remover duplicatas e filtrar vazios
+        medicamentos = [...new Set(medicamentos)].filter((med: string) => med.length > 0);
+
+        if (medicamentos.length === 0) {
+            return '';
         }
-      }
-      
-      // Se conseguiu extrair informações estruturadas
-      if (nome && dose && via) {
-        console.log(`🔍 Medicamento ${index + 1} - Extração estruturada bem-sucedida`);
-        return `
-<div class="medication-dedicated-space" style="
-  border: 2px solid #2c3e50;
-  border-radius: 6px;
-  padding: 8px;
-  margin-bottom: 8px;
-  background: #f8f9fa;
-  page-break-inside: avoid;
-">
-  <div style="
-    font-weight: 700;
-    color: #2c3e50;
-    margin-bottom: 6px;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    text-align: center;
-    background: #2c3e50;
-    color: white;
-    padding: 4px;
-    border-radius: 4px;
-  ">MEDICAMENTO ${index + 1}</div>
-  
-  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 9px;">
-    <div style="display: flex; flex-direction: column;">
-      <span style="font-weight: 600; color: #495057; margin-bottom: 2px; text-transform: uppercase; font-size: 8px;">Nome do Medicamento:</span>
-      <div style="background: white; padding: 4px 6px; border: 1px solid #ced4da; border-radius: 4px; min-height: 16px; font-weight: 500;">${nome}</div>
-    </div>
-    
-    <div style="display: flex; flex-direction: column;">
-      <span style="font-weight: 600; color: #495057; margin-bottom: 2px; text-transform: uppercase; font-size: 8px;">Dose:</span>
-      <div style="background: white; padding: 4px 6px; border: 1px solid #ced4da; border-radius: 4px; min-height: 16px; font-weight: 500;">${dose}</div>
-    </div>
-    
-    <div style="display: flex; flex-direction: column;">
-      <span style="font-weight: 600; color: #495057; margin-bottom: 2px; text-transform: uppercase; font-size: 8px;">Via de Administração:</span>
-      <div style="background: white; padding: 4px 6px; border: 1px solid #ced4da; border-radius: 4px; min-height: 16px; font-weight: 500;">${via}</div>
-    </div>
-    
-    <div style="display: flex; flex-direction: column;">
-      <span style="font-weight: 600; color: #495057; margin-bottom: 2px; text-transform: uppercase; font-size: 8px;">Dias de Administração:</span>
-      <div style="background: white; padding: 4px 6px; border: 1px solid #ced4da; border-radius: 4px; min-height: 16px; font-weight: 500;">${dias}</div>
-    </div>
-    
-    <div style="display: flex; flex-direction: column;">
-      <span style="font-weight: 600; color: #495057; margin-bottom: 2px; text-transform: uppercase; font-size: 8px;">Frequência:</span>
-      <div style="background: white; padding: 4px 6px; border: 1px solid #ced4da; border-radius: 4px; min-height: 16px; font-weight: 500;">${frequencia}</div>
-    </div>
-  </div>
-</div>`;
-      } else {
-        // Formato simples - mostrar como está
-        console.log(`🔍 Medicamento ${index + 1} - Usando formato simples`);
-        return `
-<div class="medication-dedicated-space" style="
-  border: 2px solid #2c3e50;
-  border-radius: 6px;
-  padding: 8px;
-  margin-bottom: 8px;
-  background: #f8f9fa;
-  page-break-inside: avoid;
-">
-  <div style="
-    font-weight: 700;
-    color: #2c3e50;
-    margin-bottom: 6px;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    text-align: center;
-    background: #2c3e50;
-    color: white;
-    padding: 4px;
-    border-radius: 4px;
-  ">MEDICAMENTO ${index + 1}</div>
-  
-  <div style="display: flex; flex-direction: column;">
-    <span style="font-weight: 600; color: #495057; margin-bottom: 2px; text-transform: uppercase; font-size: 8px;">Prescrição Completa:</span>
-    <div style="background: white; padding: 4px 6px; border: 1px solid #ced4da; border-radius: 4px; min-height: 16px; font-weight: 500;">${med}</div>
-  </div>
-</div>`;
-      }
-    }).join('');
-    
-    console.log('🔍 formatMedicamentosManuais - Finalizado com sucesso');
-    return resultado;
-    
-  } catch (error) {
-    console.error('❌ Erro ao formatar medicamentos manuais:', error);
-    console.error('❌ Stack trace:', error instanceof Error ? error.stack : 'N/A');
-    return medicamentosString || '';
-  }
+
+        const resultado = medicamentos.map((med, index) => {
+            // Tentar extrair informações do medicamento manual
+            const partes = med.split(' ');
+
+            // Padrão mais flexível para extrair informações
+            let nome = '';
+            let dose = '';
+            let unidade = '';
+            let via = '';
+            let dias = '';
+            let frequencia = '';
+
+            if (partes.length >= 3) {
+                // Tentar extrair baseado em padrões conhecidos
+                const viaPatterns = ['EV', 'VO', 'IM', 'SC', 'IT', 'IP', 'TOP'];
+                const unidadePatterns = ['mg', 'mg/m²', 'mg/kg', 'AUC', 'UI', 'mcg', 'ml', 'g'];
+
+                // Encontrar via de administração
+                const viaIndex = partes.findIndex(part => viaPatterns.includes(part));
+                if (viaIndex !== -1) {
+                    via = partes[viaIndex];
+
+                    // Encontrar dose (número seguido de unidade)
+                    const doseRegex = /^(\d+(?:\.\d+)?)(mg|mg\/m²|mg\/kg|AUC|UI|mcg|ml|g)$/;
+                    let doseIndex = -1;
+                    let doseMatch = null;
+
+                    for (let i = 0; i < partes.length; i++) {
+                      const match = partes[i].match(doseRegex);
+                      if (match) {
+                        doseIndex = i;
+                        doseMatch = match;
+                        break;
+                      }
+                    }
+
+                    if (doseIndex !== -1 && doseMatch) {
+                        dose = doseMatch[1] + doseMatch[2];
+                        unidade = doseMatch[2];
+
+                        // Nome é tudo antes da dose
+                        nome = partes.slice(0, doseIndex).join(' ');
+
+                        // Dias e frequência são o resto após a via
+                        const restParts = partes.slice(viaIndex + 1);
+                        if (restParts.length >= 2) {
+                          dias = restParts[0];
+                          frequencia = restParts.slice(1).join(' ');
+                        } else if (restParts.length === 1) {
+                          dias = restParts[0];
+                          frequencia = '';
+                        }
+                    }
+                }
+            }
+
+            // Se conseguiu extrair informações estruturadas
+            if (nome && dose && via) {
+                return `
+        <div class="medication-dedicated-space" style="
+          border: 2px solid #2c3e50;
+          border-radius: 6px;
+          padding: 8px;
+          margin-bottom: 8px;
+          background: #f8f9fa;
+          page-break-inside: avoid;
+        ">
+          <div style="
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 6px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            text-align: center;
+            background: #2c3e50;
+            color: white;
+            padding: 4px;
+            border-radius: 4px;
+          ">MEDICAMENTO ${index + 1}</div>
+          
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 9px;">
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-weight: 600; color: #495057; margin-bottom: 2px; text-transform: uppercase; font-size: 8px;">Nome do Medicamento:</span>
+              <div style="background: white; padding: 4px 6px; border: 1px solid #ced4da; border-radius: 4px; min-height: 16px; font-weight: 500;">${nome}</div>
+            </div>
+            
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-weight: 600; color: #495057; margin-bottom: 2px; text-transform: uppercase; font-size: 8px;">Dose:</span>
+              <div style="background: white; padding: 4px 6px; border: 1px solid #ced4da; border-radius: 4px; min-height: 16px; font-weight: 500;">${dose}</div>
+            </div>
+            
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-weight: 600; color: #495057; margin-bottom: 2px; text-transform: uppercase; font-size: 8px;">Via de Administração:</span>
+              <div style="background: white; padding: 4px 6px; border: 1px solid #ced4da; border-radius: 4px; min-height: 16px; font-weight: 500;">${via}</div>
+            </div>
+            
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-weight: 600; color: #495057; margin-bottom: 2px; text-transform: uppercase; font-size: 8px;">Dias de Administração:</span>
+              <div style="background: white; padding: 4px 6px; border: 1px solid #ced4da; border-radius: 4px; min-height: 16px; font-weight: 500;">${dias}</div>
+            </div>
+            
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-weight: 600; color: #495057; margin-bottom: 2px; text-transform: uppercase; font-size: 8px;">Frequência:</span>
+              <div style="background: white; padding: 4px 6px; border: 1px solid #ced4da; border-radius: 4px; min-height: 16px; font-weight: 500;">${frequencia}</div>
+            </div>
+          </div>
+        </div>`;
+            } else {
+                return `
+        <div class="medication-dedicated-space" style="
+          border: 2px solid #2c3e50;
+          border-radius: 6px;
+          padding: 8px;
+          margin-bottom: 8px;
+          background: #f8f9fa;
+          page-break-inside: avoid;
+        ">
+          <div style="
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 6px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            text-align: center;
+            background: #2c3e50;
+            color: white;
+            padding: 4px;
+            border-radius: 4px;
+          ">MEDICAMENTO ${index + 1}</div>
+          
+          <div style="display: flex; flex-direction: column;">
+            <span style="font-weight: 600; color: #495057; margin-bottom: 2px; text-transform: uppercase; font-size: 8px;">Prescrição Completa:</span>
+            <div style="background: white; padding: 4px 6px; border: 1px solid #ced4da; border-radius: 4px; min-height: 16px; font-weight: 500;">${med}</div>
+          </div>
+        </div>`;
+            }
+        }).join('');
+
+        return resultado;
+    } catch (error) {
+      console.error('❌ Erro ao formatar medicamentos manuais:', error);
+      console.error('❌ Stack trace:', error instanceof Error ? error.stack : 'N/A');
+      return medicamentosString || '';
+    }
 };
 
 // Função para carregar a logo padrão e converter para base64
@@ -1157,108 +1129,99 @@ const generateHTMLTemplate = (solicitacao: SolicitacaoAutorizacao): string => {
 
 // Função principal para gerar o PDF
 export const generateAuthorizationPDF = async (solicitacao: SolicitacaoAutorizacao, clinicLogo?: string): Promise<Buffer> => {
-  console.log('🏥 Gerando PDF com header perfeitamente centralizado e footer nativo somente na última página:', solicitacao.id);
-  console.log('🔧 Logo da clínica:', clinicLogo ? `✅ Fornecida` : '❌ Usando padrão do sistema');
-  
-  let browser;
-  try {
-    // Inicializar o Puppeteer com configurações otimizadas
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox', 
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding',
-        '--disable-features=TranslateUI',
-        '--disable-ipc-flooding-protection',
-        '--memory-pressure-off',
-        '--max_old_space_size=4096'
-      ]
-    });
-    
-    const page = await browser.newPage();
-    
-    // Configurar viewport otimizado
-    await page.setViewport({
-      width: 1200,
-      height: 1600,
-      deviceScaleFactor: 1.5 // Reduzido de 2 para 1.5 para melhor performance
-    });
-    
-    // Desabilitar recursos desnecessários para melhorar performance
-    await page.setRequestInterception(true);
-    page.on('request', (req) => {
-      if (['image', 'stylesheet', 'font'].includes(req.resourceType())) {
-        req.abort();
-      } else {
-        req.continue();
+    let browser;
+    try {
+        // Inicializar o Puppeteer com configurações otimizadas
+        browser = await puppeteer.launch({
+          headless: true,
+          args: [
+            '--no-sandbox', 
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--disable-gpu',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding',
+            '--disable-features=TranslateUI',
+            '--disable-ipc-flooding-protection',
+            '--memory-pressure-off',
+            '--max_old_space_size=4096'
+          ]
+        });
+
+        const page = await browser.newPage();
+
+        // Configurar viewport otimizado
+        await page.setViewport({
+          width: 1200,
+          height: 1600,
+          deviceScaleFactor: 1.5 // Reduzido de 2 para 1.5 para melhor performance
+        });
+
+        // Desabilitar recursos desnecessários para melhorar performance
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+          if (['image', 'stylesheet', 'font'].includes(req.resourceType())) {
+            req.abort();
+          } else {
+            req.continue();
+          }
+        });
+
+        // Gerar o conteúdo HTML
+        const htmlContent = generateHTMLTemplate(solicitacao);
+
+        // Carregar o HTML na página com timeout otimizado
+        await page.setContent(htmlContent, { 
+          waitUntil: ['domcontentloaded'], // Removido 'networkidle0' para melhor performance
+          timeout: 15000 // Reduzido de 30s para 15s
+        });
+
+        // Aguardar fontes carregarem com timeout
+        await Promise.race([
+          page.evaluateHandle('document.fonts.ready'),
+          new Promise(resolve => setTimeout(resolve, 1000)) // Timeout de 1s para fontes
+        ]);
+
+        // Aguardar um pouco para garantir que o layout está completo (reduzido)
+        await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 100))); // Reduzido de 200ms para 100ms
+
+        // Gerar templates do header e footer nativos
+        const headerTemplate = generateHeaderTemplate(solicitacao, clinicLogo);
+        const footerTemplate = generateFooterTemplate();
+
+        // Gerar PDF com configurações otimizadas para performance
+        const pdfUint8Array = await page.pdf({
+          format: 'A4',
+          margin: {
+            top: '132px',     // Espaço para o header nativo
+            right: '0mm',     // Margem zero para footer ocupar largura total
+            bottom: '80px',   // Espaço para o footer nativo
+            left: '0mm'       // Margem zero para footer ocupar largura total
+          },
+          printBackground: true,
+          preferCSSPageSize: false,
+          displayHeaderFooter: true,        // Header e footer nativos ativados
+          headerTemplate: headerTemplate,   // Header em todas as páginas
+          footerTemplate: footerTemplate,   // Footer configurado para ocupar largura total
+          timeout: 30000, // Reduzido de 60s para 30s
+          scale: 1,
+          omitBackground: false,
+        });
+
+        // Converter Uint8Array para Buffer
+        const pdfBuffer = Buffer.from(pdfUint8Array);
+
+        return pdfBuffer;
+    } catch (error) {
+      console.error('❌ Erro ao gerar PDF:', error);
+      throw new Error(`Erro ao gerar documento: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+    } finally {
+      if (browser) {
+        await browser.close();
       }
-    });
-    
-    // Gerar o conteúdo HTML
-    const htmlContent = generateHTMLTemplate(solicitacao);
-    
-    // Carregar o HTML na página com timeout otimizado
-    await page.setContent(htmlContent, { 
-      waitUntil: ['domcontentloaded'], // Removido 'networkidle0' para melhor performance
-      timeout: 15000 // Reduzido de 30s para 15s
-    });
-    
-    // Aguardar fontes carregarem com timeout
-    await Promise.race([
-      page.evaluateHandle('document.fonts.ready'),
-      new Promise(resolve => setTimeout(resolve, 1000)) // Timeout de 1s para fontes
-    ]);
-    
-    // Aguardar um pouco para garantir que o layout está completo (reduzido)
-    await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 100))); // Reduzido de 200ms para 100ms
-    
-    // Gerar templates do header e footer nativos
-    const headerTemplate = generateHeaderTemplate(solicitacao, clinicLogo);
-    const footerTemplate = generateFooterTemplate();
-    
-    // Gerar PDF com configurações otimizadas para performance
-    const pdfUint8Array = await page.pdf({
-      format: 'A4',
-      margin: {
-        top: '132px',     // Espaço para o header nativo
-        right: '0mm',     // Margem zero para footer ocupar largura total
-        bottom: '80px',   // Espaço para o footer nativo
-        left: '0mm'       // Margem zero para footer ocupar largura total
-      },
-      printBackground: true,
-      preferCSSPageSize: false,
-      displayHeaderFooter: true,        // Header e footer nativos ativados
-      headerTemplate: headerTemplate,   // Header em todas as páginas
-      footerTemplate: footerTemplate,   // Footer configurado para ocupar largura total
-      timeout: 30000, // Reduzido de 60s para 30s
-      scale: 1,
-      omitBackground: false,
-    });
-    
-    // Converter Uint8Array para Buffer
-    const pdfBuffer = Buffer.from(pdfUint8Array);
-    
-    console.log('✅ PDF gerado com sucesso! Tamanho:', (pdfBuffer.length / 1024).toFixed(2), 'KB');
-    console.log('📄 Header: Perfeitamente centralizado em todas as páginas');
-    console.log('📄 Footer: Nativo ocupando largura total somente na última página');
-    console.log('🖼️  Logo: Carregada do caminho especificado ou fallback SVG');
-    
-    return pdfBuffer;
-    
-  } catch (error) {
-    console.error('❌ Erro ao gerar PDF:', error);
-    throw new Error(`Erro ao gerar documento: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
-  } finally {
-    if (browser) {
-      await browser.close();
     }
-  }
 };

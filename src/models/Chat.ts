@@ -21,7 +21,7 @@ export class ChatModel {
           type, operadora_id, clinica_id, name, description, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, NOW(), NOW())
       `;
-      
+
       const values = [
         chatData.type,
         chatData.operadora_id || null,
@@ -29,20 +29,16 @@ export class ChatModel {
         chatData.name,
         chatData.description || null
       ];
-      
-      console.log('🔧 Criando novo chat...', chatData);
-      
+
       const result = await query(insertQuery, values);
       const chatId = result.insertId;
-      
-      console.log('✅ Chat criado com ID:', chatId);
-      
+
       // Buscar o chat recém-criado
       const newChat = await this.findById(chatId);
       if (!newChat) {
         throw new Error('Erro ao buscar chat recém-criado');
       }
-      
+
       return newChat;
     } catch (error) {
       console.error('Erro ao criar chat:', error);
@@ -93,26 +89,22 @@ export class ChatModel {
         AND clinica_id = ?
         LIMIT 1
       `;
-      
+
       const existingChat = await query(existingChatQuery, [operadoraId, clinicaId]);
-      
+
       if (existingChat.length > 0) {
-        console.log('✅ Chat existente encontrado:', existingChat[0].id);
         return existingChat[0];
       }
-      
-      // Se não existe, criar um novo
-      console.log('🔧 Criando novo chat entre operadora e clínica...');
-      
+
       // Buscar nomes para o chat
       const [operadoraResult, clinicaResult] = await Promise.all([
         query('SELECT nome FROM operadoras WHERE id = ?', [operadoraId]),
         query('SELECT nome FROM clinicas WHERE id = ?', [clinicaId])
       ]);
-      
+
       const operadoraNome = operadoraResult[0]?.nome || 'Operadora';
       const clinicaNome = clinicaResult[0]?.nome || 'Clínica';
-      
+
       const chatData: ChatCreateInput = {
         type: 'individual',
         operadora_id: operadoraId,
@@ -120,7 +112,7 @@ export class ChatModel {
         name: `${operadoraNome} - ${clinicaNome}`,
         description: `Chat entre ${operadoraNome} e ${clinicaNome}`
       };
-      
+
       return await this.create(chatData);
     } catch (error) {
       console.error('Erro ao buscar/criar chat operadora-clínica:', error);
@@ -266,7 +258,7 @@ export class MessageModel {
           message_type, status, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, 'sent', NOW(), NOW())
       `;
-      
+
       const values = [
         messageData.chat_id,
         messageData.sender_id,
@@ -275,23 +267,19 @@ export class MessageModel {
         messageData.content,
         messageData.message_type || 'text'
       ];
-      
-      console.log('🔧 Criando nova mensagem...', messageData);
-      
+
       const result = await query(insertQuery, values);
       const messageId = result.insertId;
-      
-      console.log('✅ Mensagem criada com ID:', messageId);
-      
+
       // Atualizar última mensagem do chat
       await this.updateChatLastMessage(messageData.chat_id, messageId);
-      
+
       // Buscar a mensagem recém-criada
       const newMessage = await this.findById(messageId);
       if (!newMessage) {
         throw new Error('Erro ao buscar mensagem recém-criada');
       }
-      
+
       return newMessage;
     } catch (error) {
       console.error('Erro ao criar mensagem:', error);

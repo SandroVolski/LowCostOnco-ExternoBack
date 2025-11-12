@@ -33,7 +33,9 @@ const convertDateToMySQL = (dateStr: string): string => {
 
 // Log somente em desenvolvimento
 const isDevelopmentEnv = (process.env.NODE_ENV || 'development') !== 'production';
-const logDev = (...args: any[]) => { if (isDevelopmentEnv) console.log(...args); };
+const logDev = (...args: any[]) => {
+  isDevelopmentEnv;
+};
 
 const ALLOWED_SEX: Array<'Masculino' | 'Feminino'> = ['Masculino', 'Feminino'];
 const ALLOWED_STATUS: Array<'Em tratamento' | 'Em remissão' | 'Alta' | 'Óbito'> = ['Em tratamento', 'Em remissão', 'Alta', 'Óbito'];
@@ -89,7 +91,6 @@ const resolveIdByName = async (table: 'Operadoras' | 'Prestadores', nameOrId: nu
   
   // Para prestadores, não criar automaticamente (deixar como defaultId)
   if (table === 'Prestadores') {
-    console.log(`⚠️ Prestador "${name}" não encontrado, usando ID padrão: ${defaultId}`);
     return defaultId;
   }
   
@@ -196,15 +197,7 @@ export class PacienteModel {
       
       // Debug: Verificar campos do médico assistente
       if (patients && patients.length > 0) {
-        console.log('🔧 Debug findAll - Primeiro paciente:');
         const firstPatient = patients[0];
-        console.log('  ID:', firstPatient.id);
-        console.log('  Nome:', firstPatient.nome);
-        console.log('  Prestador ID:', firstPatient.prestador_id);
-        console.log('  Médico Assistente Nome:', firstPatient.medico_assistente_nome);
-        console.log('  Médico Assistente Email:', firstPatient.medico_assistente_email);
-        console.log('  Médico Assistente Telefone:', firstPatient.medico_assistente_telefone);
-        console.log('  Médico Assistente Especialidade:', firstPatient.medico_assistente_especialidade);
       }
       
       return {
@@ -240,17 +233,8 @@ export class PacienteModel {
     
     try {
       const result = await query(selectQuery, [id]);
-      console.log('🔧 Debug findById - Resultado da consulta:', result);
       if (result.length > 0) {
         const paciente = result[0];
-        console.log('🔧 Debug findById - Paciente encontrado:');
-        console.log('  ID:', paciente.id);
-        console.log('  Nome:', paciente.nome);
-        console.log('  Prestador ID:', paciente.prestador_id);
-        console.log('  Médico Assistente Nome:', paciente.medico_assistente_nome);
-        console.log('  Médico Assistente Email:', paciente.medico_assistente_email);
-        console.log('  Médico Assistente Telefone:', paciente.medico_assistente_telefone);
-        console.log('  Médico Assistente Especialidade:', paciente.medico_assistente_especialidade);
       }
       return result.length > 0 ? result[0] : null;
     } catch (error) {
@@ -309,15 +293,7 @@ export class PacienteModel {
       
       // Debug: Log dos campos do médico assistente
       if (patients && patients.length > 0) {
-        console.log('🔧 Debug findByClinicaId - Primeiro paciente:');
         const firstPatient = patients[0];
-        console.log('  ID:', firstPatient.id);
-        console.log('  Nome:', firstPatient.nome);
-        console.log('  Prestador ID:', firstPatient.prestador_id);
-        console.log('  Médico Assistente Nome:', firstPatient.medico_assistente_nome);
-        console.log('  Médico Assistente Email:', firstPatient.medico_assistente_email);
-        console.log('  Médico Assistente Telefone:', firstPatient.medico_assistente_telefone);
-        console.log('  Médico Assistente Especialidade:', firstPatient.medico_assistente_especialidade);
       }
       
       return {
@@ -338,26 +314,24 @@ export class PacienteModel {
   // Criar paciente (novo schema: tabela 'pacientes')
   static async create(pacienteData: PacienteCreateInput): Promise<Paciente> {
     logDev('🔧 Dados recebidos para criação:', pacienteData);
-    
+
     // Validar dados obrigatórios
     const validationErrors = validatePacienteData(pacienteData);
     if (validationErrors.length > 0) {
         throw new Error(`Dados inválidos: ${validationErrors.join(', ')}`);
     }
-    
+
     // SEMPRE buscar operadora_id da clínica, ignorando o valor vindo do frontend
     let operadoraId: number | null = null;
-    
+
     if (pacienteData.clinica_id) {
       try {
-        console.log('🔧 Buscando operadora_id da clínica:', pacienteData.clinica_id);
         const clinicaResult = await query(
           'SELECT operadora_id FROM clinicas WHERE id = ?',
           [pacienteData.clinica_id]
         );
         if (clinicaResult.length > 0 && clinicaResult[0].operadora_id) {
           operadoraId = clinicaResult[0].operadora_id;
-          console.log('✅ operadora_id obtido da clínica:', operadoraId);
         } else {
           console.warn('⚠️ Clínica não tem operadora_id configurado');
         }
@@ -365,7 +339,7 @@ export class PacienteModel {
         console.error('❌ Erro ao buscar operadora_id da clínica:', error);
       }
     }
-    
+
     // Se ainda não encontrou, tentar usar o valor do frontend (como fallback)
     if (!operadoraId && pacienteData.Operadora !== undefined && pacienteData.Operadora !== null) {
       console.warn('⚠️ Usando operadora_id do frontend (pode causar erro se inválido)');
@@ -375,41 +349,40 @@ export class PacienteModel {
         operadoraId = Number.isFinite(parsed) ? parsed : null;
       }
     }
-    
+
     // Processar prestador_id
     let prestadorId: number | null = null;
     if (pacienteData.Prestador !== undefined && pacienteData.Prestador !== null) {
       prestadorId = await resolveIdByName('Prestadores', pacienteData.Prestador, 1);
-      console.log('🔧 prestador_id resolvido:', prestadorId);
     }
-    
+
     // Converter e validar datas
     const dataNascimento = convertDateToMySQL(pacienteData.Data_Nascimento);
     const inicioTratamento = pacienteData.Data_Inicio_Tratamento || pacienteData.Data_Primeira_Solicitacao;
     const dataPrimeiraSolicitacao = convertDateToMySQL(
         inicioTratamento || new Date().toISOString().split('T')[0]
     );
-    
+
     if (!dataNascimento) {
         throw new Error('Data de nascimento inválida');
     }
-    
+
     if (!dataPrimeiraSolicitacao) {
         throw new Error('Data da primeira solicitação inválida');
     }
-    
+
     const sexo = normalizeSexo(pacienteData.Sexo);
     const normalizedStatusRaw = normalizeStatus(pacienteData.status);
     const normalizedStatus = normalizedStatusRaw || 'Em tratamento';
 
     // Normalizações opcionais
     const cep = normalizeCep(pacienteData.endereco_cep);
-    
+
     logDev('🔧 Datas convertidas:', {
         dataNascimento,
         dataPrimeiraSolicitacao
     });
-    
+
     // Montar JSONs conforme novo schema
     const contatosJson = ((): any => {
       const obj: any = {};
@@ -449,16 +422,7 @@ export class PacienteModel {
       INSERT INTO pacientes (${insertColumns.join(', ')})
       VALUES (${placeholders})
     `;
-    
-    // LOG DETALHADO para debug
-    console.log('🔧 ===== DEBUG CRIAÇÃO PACIENTE =====');
-    console.log('🔧 clinica_id:', pacienteData.clinica_id);
-    console.log('🔧 operadora_id (resolvido):', operadoraId);
-    console.log('🔧 prestador_id (resolvido):', prestadorId);
-    console.log('🔧 Operadora original (frontend):', pacienteData.Operadora);
-    console.log('🔧 Prestador original (frontend):', pacienteData.Prestador);
-    console.log('🔧 =====================================');
-    
+
     const values = [
         pacienteData.clinica_id || 1,
         operadoraId,
@@ -483,9 +447,9 @@ export class PacienteModel {
         contatoEmergenciaJson,
         pacienteData.observacoes || null
     ];
-    
+
     logDev('🔧 Valores finais para inserção:', values);
-    
+
     try {
         const result = await query(insertQuery, values);
         const insertId = result.insertId;
@@ -518,7 +482,7 @@ export class PacienteModel {
       const message = (error as any)?.message || 'Erro ao criar paciente';
       throw new Error(message);
     }
-    }
+  }
   
   // Atualizar paciente
   static async update(id: number, pacienteData: PacienteUpdateInput): Promise<Paciente | null> {
@@ -533,14 +497,14 @@ export class PacienteModel {
       'Operadora': 'operadora_id',
       'Prestador': 'prestador_id'
     };
-    
+
     // Campos que devem ser agrupados em JSON
     const jsonFields = {
       contatos: ['telefone', 'email', 'contato_telefone', 'contato_celular', 'contato_email'],
       endereco: ['endereco_rua', 'endereco_numero', 'endereco_bairro', 'endereco_cidade', 'endereco_estado', 'endereco_cep', 'endereco'],
       contato_emergencia: ['contato_emergencia_nome', 'contato_emergencia_telefone']
     };
-    
+
     // Pré-processar dados (normalizações, resoluções e conversões)
     const dataToUpdate: any = {};
     const jsonData: any = {
@@ -632,30 +596,26 @@ export class PacienteModel {
     // Construir query dinâmica baseada nos campos fornecidos
     const updateFields: string[] = [];
     const values: any[] = [];
-    
+
     Object.entries(dataToUpdate).forEach(([key, value]) => {
       if (value !== undefined) {
         updateFields.push(`${key} = ?`);
         values.push(value);
       }
     });
-    
+
     if (updateFields.length === 0) {
       throw new Error('Nenhum campo para atualizar');
     }
-    
+
     const updateQuery = `
       UPDATE pacientes 
       SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `;
-    
+
     values.push(id);
-    
-    console.log('🔧 Debug UPDATE query:');
-    console.log('Query:', updateQuery);
-    console.log('Values:', values);
-    
+
     try {
       const result = await query(updateQuery, values);
       

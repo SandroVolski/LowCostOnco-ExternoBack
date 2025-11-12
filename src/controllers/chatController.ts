@@ -12,17 +12,15 @@ export class ChatController {
       const user = (req as any).user;
       const userId = user.id;
       const userType = user.tipo === 'operadora' ? 'operadora' : 'clinica';
-      
-      console.log('🔧 Buscando chats para usuário:', { userId, userType });
-      
+
       let chats;
-      
+
       if (userType === 'operadora') {
         chats = await ChatModel.findByOperadoraId(userId);
       } else {
         chats = await ChatModel.findByClinicaId(userId);
       }
-      
+
       // Adicionar contagem de mensagens não lidas
       const chatsWithUnreadCount = await Promise.all(
         chats.map(async (chat) => {
@@ -33,7 +31,7 @@ export class ChatController {
           };
         })
       );
-      
+
       res.json({
         success: true,
         data: chatsWithUnreadCount

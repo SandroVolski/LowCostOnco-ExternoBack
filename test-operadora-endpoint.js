@@ -3,8 +3,6 @@ const fetch = require('node-fetch');
 
 async function testOperadoraEndpoint() {
   try {
-    console.log('🔧 Testando endpoint de login da operadora...');
-    
     const response = await fetch('http://localhost:3001/api/operadora-auth/login', {
       method: 'POST',
       headers: {
@@ -16,18 +14,9 @@ async function testOperadoraEndpoint() {
       })
     });
 
-    console.log('📊 Status da resposta:', response.status);
-    console.log('📊 Headers:', Object.fromEntries(response.headers.entries()));
-
     const data = await response.json();
-    console.log('📊 Dados da resposta:', JSON.stringify(data, null, 2));
 
-    if (response.ok) {
-      console.log('✅ Login realizado com sucesso!');
-    } else {
-      console.log('❌ Erro no login');
-    }
-
+    if (response.ok) {} else {}
   } catch (error) {
     console.error('❌ Erro ao testar endpoint:', error);
   }

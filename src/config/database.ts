@@ -112,7 +112,6 @@ const withRetry = async <T>(action: () => Promise<T>, maxRetries: number = 3): P
       
       // Para ECONNRESET, tentar recriar o pool
       if ((error as any)?.code === 'ECONNRESET' || /ECONNRESET/i.test((error as any)?.message)) {
-        console.log('🔄 Tentando recriar pool devido a ECONNRESET...');
         try {
           await pool.end();
           // Recriar pool com configuração limpa
@@ -142,12 +141,9 @@ const cleanupOrphanedConnections = async () => {
     // Ping todas as conexões do pool para identificar órfãs
     const connections = (pool as any)._allConnections || [];
     const activeConnections = (pool as any)._freeConnections || [];
-    
-    console.log(`🧹 Limpeza de conexões: ${connections.length} total, ${activeConnections.length} ativas`);
-    
+
     // Se há muitas conexões inativas, forçar limpeza
     if (connections.length > 15) {
-      console.log('🧹 Forçando limpeza de conexões órfãs...');
       await pool.end();
       // Recriar pool
       Object.assign(pool, mysql.createPool(dbConfig));
@@ -159,8 +155,6 @@ const cleanupOrphanedConnections = async () => {
 
 // Monitoramento do pool
 pool.on('connection', (connection: any) => {
-  console.log('🔗 Nova conexão criada no pool');
-  
   // Configurar timeouts para cada conexão
   if (connection.config) {
     connection.config.queryTimeout = 15000; // 15 segundos para queries
@@ -168,17 +162,11 @@ pool.on('connection', (connection: any) => {
   }
 });
 
-pool.on('acquire', (connection: any) => {
-  console.log('📥 Conexão adquirida do pool');
-});
+pool.on('acquire', (connection: any) => {});
 
-pool.on('release', (connection: any) => {
-  console.log('📤 Conexão liberada para o pool');
-});
+pool.on('release', (connection: any) => {});
 
-pool.on('enqueue', () => {
-  console.log('⏳ Requisição enfileirada (pool cheio)');
-});
+pool.on('enqueue', () => {});
 
 // Limpeza periódica de conexões órfãs a cada 5 minutos
 setInterval(cleanupOrphanedConnections, 5 * 60 * 1000);
@@ -189,14 +177,12 @@ const heartbeat = async () => {
     const connection = await pool.getConnection();
     await connection.query('SELECT 1 as heartbeat');
     connection.release();
-    console.log('💓 Heartbeat do pool MySQL OK');
   } catch (error) {
     console.warn('💔 Heartbeat do pool falhou:', (error as any)?.message);
     // Tentar recriar o pool
     try {
       await pool.end();
       Object.assign(pool, mysql.createPool(dbConfig));
-      console.log('🔄 Pool recriado após falha no heartbeat');
     } catch (recreateError) {
       console.error('❌ Erro ao recriar pool:', (recreateError as any)?.message);
     }
@@ -215,8 +201,7 @@ export const testConnection = async (): Promise<boolean> => {
         setTimeout(() => reject(new Error('Timeout ao conectar')), 10000)
       )
     ]);
-    
-    console.log('✅ Conectado ao banco de dados MySQL');
+
     // Ping rápido para validar ciclo completo
     try {
       await (connection as any).query('SELECT 1');
@@ -256,13 +241,10 @@ export const queryWithLimit = async (sql: string, params: any[] = [], limit: num
       // Validar limit e offset
       const safeLimit = Math.max(1, Math.min(100, Math.floor(Number(limit))));
       const safeOffset = Math.max(0, Math.floor(Number(offset)));
-      
+
       // Construir a query final substituindo LIMIT e OFFSET
       const finalSql = sql + ` LIMIT ${safeLimit} OFFSET ${safeOffset}`;
-      
-      console.log('Executando query com limit:', finalSql);
-      console.log('Parâmetros:', params);
-      
+
       const [results] = await Promise.race([
         params.length > 0 
           ? pool.execute(finalSql, params)
@@ -271,7 +253,7 @@ export const queryWithLimit = async (sql: string, params: any[] = [], limit: num
           setTimeout(() => reject(new Error('Timeout na query com limit')), 15000) // Reduzido para 15s
         )
       ]);
-      
+
       return results;
     } catch (error) {
       console.error('Erro na query com limit:', error);
@@ -293,7 +275,6 @@ export const getPoolStats = () => {
 export const closePool = async (): Promise<void> => {
   try {
     await pool.end();
-    console.log('✅ Pool de conexões fechado com sucesso');
   } catch (error) {
     console.error('❌ Erro ao fechar pool:', error);
   }

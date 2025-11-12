@@ -12,8 +12,6 @@ async function createTestAuditor() {
   });
 
   try {
-    console.log('👨‍⚕️ Criando auditor de teste...\n');
-
     // Verificar se já existe
     const [existing] = await conn.query(
       'SELECT id FROM auditores WHERE cpf = ?',
@@ -21,7 +19,6 @@ async function createTestAuditor() {
     );
 
     if (existing.length > 0) {
-      console.log('ℹ️  Auditor de teste já existe. Removendo...');
       await conn.query('DELETE FROM auditor_users WHERE auditor_id = ?', [existing[0].id]);
       await conn.query('DELETE FROM auditores WHERE id = ?', [existing[0].id]);
     }
@@ -51,15 +48,6 @@ async function createTestAuditor() {
        VALUES (?, ?, ?, TRUE)`,
       [auditorId, 'auditor', passwordHash]
     );
-
-    console.log('✅ Auditor de teste criado com sucesso!\n');
-    console.log('📋 Dados de acesso:');
-    console.log('   Nome: Dr. João Silva');
-    console.log('   Username: auditor');
-    console.log('   Senha: auditor123');
-    console.log('   Email: auditor@sistema.com');
-    console.log('   CRM: 12345/SP\n');
-
   } catch (error) {
     console.error('❌ Erro:', error.message);
   } finally {

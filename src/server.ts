@@ -67,12 +67,11 @@ app.use('/api/solicitacoes/:id/pdf', (req, res, next) => {
   res.removeHeader('X-Frame-Options');
   res.removeHeader('Content-Security-Policy');
   res.removeHeader('X-Content-Type-Options');
-  
+
   // Adicionar headers específicos para PDF
   res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
   res.setHeader('Referrer-Policy', 'no-referrer');
-  
-  console.log('🔧 Headers CSP removidos para visualização de PDF');
+
   next();
 });
 
@@ -123,7 +122,6 @@ app.use(cacheHeaders);
 
 // Middleware de log para debug
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   next();
 });
 
@@ -296,52 +294,9 @@ const startServer = async () => {
     
     if (!isDbConnected) {
       console.error('❌ Não foi possível conectar ao banco de dados');
-      console.log('⚠️  Continuando sem banco (modo desenvolvimento)...');
     }
     
-    app.listen(PORT, () => {
-      console.log('\n🚀 Servidor iniciado com sucesso!');
-      console.log(`📡 API disponível em: http://localhost:${PORT}`);
-      console.log(`🏥 Health check: http://localhost:${PORT}/health`);
-      console.log(`📊 Stats: http://localhost:${PORT}/api/stats`);
-      console.log(`🔍 Performance: http://localhost:${PORT}/api/performance/diagnose`);
-      console.log(`🔧 Test DB: http://localhost:${PORT}/api/test-db`);
-      console.log(`👤 Pacientes API: http://localhost:${PORT}/api/pacientes`);
-      console.log(`📋 Solicitações API: http://localhost:${PORT}/api/solicitacoes`);
-      console.log(`🗄️  Database: ${isDbConnected ? '✅ Conectado' : '❌ Desconectado'}`);
-      console.log('\n📚 Endpoints disponíveis:');
-      console.log('   GET    /health');
-      console.log('   GET    /api');
-      console.log('   GET    /api/stats');
-      console.log('   GET    /api/performance/diagnose');
-      console.log('   GET    /api/test-db');
-      console.log('   GET    /test-db');
-      console.log('   GET    /api/pacientes');
-      console.log('   POST   /api/pacientes');
-      console.log('   GET    /api/pacientes/:id');
-      console.log('   PUT    /api/pacientes/:id');
-      console.log('   DELETE /api/pacientes/:id');
-      console.log('   GET    /api/solicitacoes');
-      console.log('   POST   /api/solicitacoes');
-      console.log('   GET    /api/solicitacoes/:id');
-      console.log('   GET    /api/solicitacoes/:id/pdf');
-      console.log('   PUT    /api/solicitacoes/:id/status');
-      console.log('   DELETE /api/solicitacoes/:id');
-      console.log('   GET    /api/protocolos');
-      console.log('   POST   /api/protocolos');
-      console.log('   GET    /api/protocolos/:id');
-      console.log('   PUT    /api/protocolos/:id');
-      console.log('   DELETE /api/protocolos/:id');
-      console.log('   GET    /api/notificacoes');
-      console.log('   GET    /api/mobile/pacientes/medico/:medicoId');
-      console.log('   POST   /api/notificacoes/:id/lida');
-      console.log('   POST   /api/notificacoes/lidas');
-      console.log('   POST   /api/notificacoes');
-      console.log('   POST   /api/auth/forgot-password');
-      console.log('   GET    /api/catalog/principios-ativos');
-      console.log('   GET    /api/catalog/cid10');
-      console.log('\n🎯 Pronto para receber requisições!\n');
-    });
+    app.listen(PORT, () => {});
     
   } catch (error) {
     console.error('❌ Erro ao iniciar servidor:', error);
@@ -361,13 +316,11 @@ process.on('uncaughtException', (error) => {
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-  console.log('\n🛑 Recebido SIGINT. Encerrando servidor graciosamente...');
   await closePool();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  console.log('\n🛑 Recebido SIGTERM. Encerrando servidor graciosamente...');
   await closePool();
   process.exit(0);
 });

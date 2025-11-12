@@ -5,8 +5,6 @@ const API_BASE_URL = 'http://localhost:3001/api';
 
 async function testCorrecoesPDF() {
   try {
-    console.log('🧪 Testando correções do PDF...\n');
-    
     const dadosSolicitacao = {
       clinica_id: 1,
       hospital_nome: 'Clínica Teste Correções',
@@ -55,44 +53,20 @@ async function testCorrecoesPDF() {
       
       medico_assinatura_crm: 'CRM 123456/SP'
     };
-    
-    console.log('📤 Criando solicitação de teste...');
+
     const createResponse = await axios.post(`${API_BASE_URL}/solicitacoes`, dadosSolicitacao);
-    
+
     if (createResponse.data.success) {
       const solicitacaoId = createResponse.data.data.id;
-      console.log('✅ Solicitação criada com ID:', solicitacaoId);
-      
-      // Gerar PDF
-      console.log('📄 Gerando PDF...');
       const pdfResponse = await axios.get(`${API_BASE_URL}/solicitacoes/${solicitacaoId}/pdf`, {
         responseType: 'arraybuffer'
       });
-      
-      console.log('✅ PDF gerado com sucesso!');
-      console.log('📏 Tamanho do PDF:', (pdfResponse.data.length / 1024).toFixed(2), 'KB');
-      
+
       // Salvar PDF para verificação
       const fs = require('fs');
       const fileName = `teste-correcoes-pdf-${solicitacaoId}.pdf`;
       fs.writeFileSync(fileName, pdfResponse.data);
-      console.log('💾 PDF salvo como:', fileName);
-      
-      console.log('\n📋 Correções testadas:');
-      console.log('✅ 1. Fonte padronizada: Source Sans Pro em todo o documento');
-      console.log('✅ 2. Espaçamento reduzido: margin-bottom de 12px para 8px entre seções');
-      console.log('✅ 3. Nome atualizado: "Low Cost Onco" → "Onkhos"');
-      console.log('');
-      console.log('👀 Abra o arquivo PDF para verificar:');
-      console.log('   • Se a fonte está consistente em todo o documento');
-      console.log('   • Se o espaçamento entre seções está menor');
-      console.log('   • Se o nome "Onkhos" aparece no rodapé');
-      console.log('   • Se os campos específicos aparecem corretamente');
-      
-    } else {
-      console.log('❌ Erro ao criar solicitação:', createResponse.data.message);
-    }
-    
+    } else {}
   } catch (error) {
     console.error('❌ Erro no teste:', {
       message: error.message,

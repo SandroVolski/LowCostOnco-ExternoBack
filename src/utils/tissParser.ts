@@ -164,8 +164,6 @@ export class TISSParser {
    */
   static async parseXML(xmlContent: string): Promise<TISSParsedData> {
     try {
-      console.log('🔧 Iniciando parse do XML TISS...');
-      
       const result = await parseStringPromise(xmlContent, {
         explicitArray: false,
         mergeAttrs: true,
@@ -174,29 +172,21 @@ export class TISSParser {
         explicitCharkey: false
       });
 
-      console.log('📋 XML parseado com sucesso, estrutura:', Object.keys(result));
-
       const mensagem = result.mensagemTISS;
-      
+
       if (!mensagem) {
-        console.log('⚠️ mensagemTISS não encontrado! Estrutura do result:', Object.keys(result));
         throw new Error('Estrutura de XML TISS inválida');
       }
 
-      console.log('📋 Mensagem TISS encontrada:', Object.keys(mensagem));
-
       const loteGuias = mensagem.prestadorParaOperadora?.loteGuias;
-      console.log('📋 LoteGuias encontrado:', loteGuias);
 
       if (!loteGuias) {
-        console.log('⚠️ loteGuias não encontrado! Estrutura do prestadorParaOperadora:', mensagem.prestadorParaOperadora);
         throw new Error('loteGuias não encontrado no XML');
       }
 
       // Extrair hash do epílogo
       const epilogo = mensagem.epilogo;
       const hashEpilogo = this.parseEpilogo(epilogo);
-      console.log('📋 Hash do epílogo:', hashEpilogo);
 
       const parsedData = {
         cabecalho: this.parseCabecalho(mensagem.cabecalho, hashEpilogo),
@@ -206,13 +196,6 @@ export class TISSParser {
         versao_tiss: this.parseVersaoTISS(mensagem),
         hash_xml: this.generateHash(xmlContent)
       };
-
-      console.log('✅ Parse completo finalizado:', {
-        cabecalho: parsedData.cabecalho,
-        lote: parsedData.lote,
-        operadora: parsedData.operadora,
-        totalGuias: parsedData.guias.length
-      });
 
       return parsedData;
     } catch (error: any) {
@@ -232,10 +215,7 @@ export class TISSParser {
    * Parse do cabeçalho do XML
    */
   private static parseCabecalho(cabecalho: any, hashEpilogo?: string): TISSParsedData['cabecalho'] {
-    console.log('🔧 Parseando cabeçalho:', cabecalho);
-
     if (!cabecalho) {
-      console.log('⚠️ Cabeçalho não encontrado!');
       return {
         tipoTransacao: '',
         sequencialTransacao: '',
@@ -268,7 +248,6 @@ export class TISSParser {
       hash: hashEpilogo || cabecalho.hash || ''  // Priorizar hash do epílogo
     };
 
-    console.log('✅ Cabeçalho parseado:', parsed);
     return parsed;
   }
 
@@ -276,10 +255,7 @@ export class TISSParser {
    * Parse do lote
    */
   private static parseLote(loteGuias: any): TISSParsedData['lote'] {
-    console.log('🔧 Parseando lote:', loteGuias);
-    
     if (!loteGuias) {
-      console.log('⚠️ loteGuias não encontrado!');
       return {
         numeroLote: '',
         competencia: '',
@@ -287,7 +263,7 @@ export class TISSParser {
         valor_total: 0
       };
     }
-    
+
     return {
       numeroLote: loteGuias.numeroLote || '',
       competencia: loteGuias.competencia || '',
@@ -300,25 +276,19 @@ export class TISSParser {
    * Parse das guias
    */
   private static parseGuias(loteGuias: any): TISSGuia[] {
-    console.log('🔧 Parseando guias do lote:', loteGuias);
-    
     if (!loteGuias) {
-      console.log('⚠️ loteGuias não encontrado!');
       return [];
     }
-    
+
     // Acessar guiasTISS diretamente do loteGuias
     const guiasTISS = loteGuias.guiasTISS;
-    console.log('📋 GuiasTISS encontradas:', guiasTISS);
-    
+
     if (!guiasTISS) {
-      console.log('⚠️ guiasTISS não encontrado! Estrutura do loteGuias:', JSON.stringify(loteGuias, null, 2));
       return [];
     }
-    
+
     // Acessar as guias SP-SADT
     let guiasArray = guiasTISS['guiaSP-SADT'];
-    console.log('📋 Guias SP-SADT encontradas:', guiasArray);
 
     // Garantir que seja um array
     if (!Array.isArray(guiasArray)) {
@@ -329,15 +299,11 @@ export class TISSParser {
       }
     }
 
-    console.log(`📋 Total de guias encontradas: ${guiasArray.length}`);
-    
     if (guiasArray.length === 0) {
-      console.log('⚠️ Nenhuma guia encontrada! Estrutura do guiasTISS:', JSON.stringify(guiasTISS, null, 2));
       return [];
     }
-    
+
     return guiasArray.map((guia: any, index: number) => {
-      console.log(`🔧 Processando guia ${index + 1}:`, guia.cabecalhoGuia?.numeroGuiaPrestador);
       return this.parseGuia(guia);
     });
   }
@@ -346,8 +312,6 @@ export class TISSParser {
    * Parse de uma guia individual
    */
   private static parseGuia(guia: any): TISSGuia {
-    console.log('🔧 Parseando guia individual:', guia.cabecalhoGuia?.numeroGuiaPrestador);
-    
     const cabecalho = guia.cabecalhoGuia;
     const autorizacao = guia.dadosAutorizacao;
     const beneficiario = guia.dadosBeneficiario;
@@ -357,34 +321,23 @@ export class TISSParser {
     const atendimento = guia.dadosAtendimento;
     const valorTotal = guia.valorTotal;
 
-    console.log('📋 Dados da guia:', {
-      cabecalho: cabecalho?.numeroGuiaPrestador,
-      autorizacao: autorizacao?.numeroGuiaOperadora,
-      beneficiario: beneficiario?.numeroCarteira,
-      valorTotal: valorTotal?.valorTotalGeral
-    });
-
     // Parse de procedimentos executados
     let procedimentos: TISSProcedimento[] = [];
     if (guia.procedimentosExecutados) {
-      console.log('🔧 Processando procedimentos executados...');
       let procArray = guia.procedimentosExecutados.procedimentoExecutado;
       if (!Array.isArray(procArray)) {
         procArray = [procArray];
       }
-      console.log(`📋 Encontrados ${procArray.length} procedimentos`);
       procedimentos = procArray.map((p: any) => this.parseProcedimento(p));
     }
 
     // Parse de outras despesas
     let despesas: TISSDespesa[] = [];
     if (guia.outrasDespesas) {
-      console.log('🔧 Processando outras despesas...');
       let despArray = guia.outrasDespesas.despesa;
       if (!Array.isArray(despArray)) {
         despArray = [despArray];
       }
-      console.log(`📋 Encontradas ${despArray.length} despesas`);
       despesas = despArray.map((d: any) => this.parseDespesa(d));
     }
 
@@ -538,15 +491,6 @@ export class TISSParser {
       valor_total: this.parseFloat(valorTotal?.valorTotalGeral) || 0,
     };
 
-    console.log('✅ Guia parseada:', {
-      numero: guiaParsed.cabecalhoGuia.numeroGuiaPrestador,
-      carteira: guiaParsed.dadosBeneficiario?.numeroCarteira,
-      dataAuth: guiaParsed.dadosAutorizacao?.dataAutorizacao,
-      valorTotal: guiaParsed.valorTotal.valorTotalGeral,
-      procedimentos: procedimentos.length,
-      despesas: despesas.length
-    });
-
     return guiaParsed;
   }
 
@@ -632,19 +576,15 @@ export class TISSParser {
    * Parse da operadora
    */
   private static parseOperadora(loteGuias: any): any {
-    console.log('🔧 Parseando operadora:', loteGuias);
-    
     if (!loteGuias) {
-      console.log('⚠️ loteGuias não encontrado para operadora!');
       return {
         registro_ans: '',
         nome: ''
       };
     }
-    
+
     const operadora = loteGuias.operadora;
-    console.log('📋 Operadora encontrada:', operadora);
-    
+
     return {
       registro_ans: operadora?.registroANS || operadora?.registro_ans || '',
       nome: operadora?.nome || '',
@@ -663,12 +603,10 @@ export class TISSParser {
    */
   private static parseEpilogo(epilogo: any): string {
     if (!epilogo) {
-      console.log('⚠️ Epílogo não encontrado!');
       return '';
     }
 
     const hash = epilogo.hash || '';
-    console.log('✅ Hash do epílogo extraído:', hash);
     return hash;
   }
 
