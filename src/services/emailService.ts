@@ -130,7 +130,7 @@ export class EmailService {
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
           }
           .header {
-            background: linear-gradient(135deg, #79d153 0%, #8cb369 100%);
+            background: linear-gradient(135deg, #1f4edd 0%, #65a3ee 100%);
             padding: 40px 30px;
             text-align: center;
             position: relative;
@@ -194,14 +194,14 @@ export class EmailService {
           .button {
             display: inline-block;
             padding: 16px 40px;
-            background: linear-gradient(135deg, #79d153 0%, #8cb369 100%);
+            background: linear-gradient(135deg, #1f4edd 0%, #65a3ee 100%);
             color: #ffffff !important;
             text-decoration: none;
             border-radius: 12px;
             font-weight: 700;
             font-size: 16px;
             letter-spacing: 0.5px;
-            box-shadow: 0 4px 15px rgba(121, 209, 83, 0.4);
+            box-shadow: 0 4px 15px rgba(31, 78, 221, 0.4);
             transition: all 0.3s ease;
             text-transform: uppercase;
             position: relative;
@@ -222,7 +222,7 @@ export class EmailService {
           }
           .button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(121, 209, 83, 0.5);
+            box-shadow: 0 6px 20px rgba(31, 78, 221, 0.5);
           }
           .button:active {
             transform: translateY(0);
@@ -232,7 +232,7 @@ export class EmailService {
             padding: 20px;
             background-color: #f8f9fa;
             border-radius: 8px;
-            border-left: 4px solid #79d153;
+            border-left: 4px solid #1f4edd;
           }
           .link-fallback-title {
             font-size: 14px;
@@ -242,7 +242,7 @@ export class EmailService {
           }
           .link-fallback-url {
             font-size: 12px;
-            color: #79d153;
+            color: #1f4edd;
             word-break: break-all;
             font-family: 'Courier New', monospace;
             line-height: 1.6;
@@ -523,7 +523,7 @@ export class EmailService {
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
           }
           .header {
-            background: linear-gradient(135deg, #79d153 0%, #8cb369 100%);
+            background: linear-gradient(135deg, #1f4edd 0%, #65a3ee 100%);
             padding: 40px 30px;
             text-align: center;
             position: relative;
@@ -570,7 +570,7 @@ export class EmailService {
           }
           .info-box {
             background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            border-left: 4px solid #79d153;
+            border-left: 4px solid #1f4edd;
             padding: 20px;
             margin: 30px 0;
             border-radius: 8px;
@@ -596,13 +596,13 @@ export class EmailService {
             content: '✓';
             position: absolute;
             left: 0;
-            color: #79d153;
+            color: #1f4edd;
             font-weight: bold;
             font-size: 16px;
           }
           .features-box {
             background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
-            border-left: 4px solid #4caf50;
+            border-left: 4px solid #65a3ee;
             padding: 25px;
             margin: 30px 0;
             border-radius: 8px;
@@ -638,14 +638,14 @@ export class EmailService {
           .button {
             display: inline-block;
             padding: 16px 40px;
-            background: linear-gradient(135deg, #79d153 0%, #8cb369 100%);
+            background: linear-gradient(135deg, #1f4edd 0%, #65a3ee 100%);
             color: #ffffff !important;
             text-decoration: none;
             border-radius: 12px;
             font-weight: 700;
             font-size: 16px;
             letter-spacing: 0.5px;
-            box-shadow: 0 4px 15px rgba(121, 209, 83, 0.4);
+            box-shadow: 0 4px 15px rgba(31, 78, 221, 0.4);
             transition: all 0.3s ease;
             text-transform: uppercase;
             position: relative;
@@ -666,7 +666,7 @@ export class EmailService {
           }
           .button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(121, 209, 83, 0.5);
+            box-shadow: 0 6px 20px rgba(31, 78, 221, 0.5);
           }
           .footer {
             background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
@@ -761,7 +761,7 @@ export class EmailService {
 
             <div class="message" style="font-size: 14px; color: #6c757d;">
               <strong>📱 URL do Aplicativo:</strong><br>
-              <a href="https://mobile.onkhos.com" style="color: #79d153; text-decoration: none; word-break: break-all;">https://mobile.onkhos.com</a>
+              <a href="https://mobile.onkhos.com" style="color: #1f4edd; text-decoration: none; word-break: break-all;">https://mobile.onkhos.com</a>
             </div>
 
             <div style="background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 15px; margin: 30px 0;">
@@ -777,7 +777,7 @@ export class EmailService {
               Equipe OnkoLink
             </div>
             <div class="footer-text">
-              <a href="https://www.onkho.com.br" target="_blank" style="color: #79d153; text-decoration: none;">www.onkho.com.br</a>
+              <a href="https://www.onkho.com.br" target="_blank" style="color: #1f4edd; text-decoration: none;">www.onkho.com.br</a>
             </div>
             <div class="footer-copyright">
               Este é um email automático. Por favor, não responda a este email.
