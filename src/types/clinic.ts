@@ -1,5 +1,7 @@
 // src/types/clinic.ts
 
+import { Operadora } from './operadora';
+
 export type ClinicStatus = 'ativo' | 'inativo';
 export type ResponsavelStatus = 'ativo' | 'inativo';
 
@@ -91,6 +93,8 @@ export interface Clinica {
   estado?: string;
   cep?: string;
   operadora_id?: number;
+  operadora_ids?: number[];
+  operadoras?: Operadora[];
   // Campos antigos (mantidos para compatibilidade)
   telefone?: string;
   email?: string;
@@ -150,6 +154,7 @@ export interface ClinicaCreateInput {
   senha?: string;
   status?: ClinicStatus;
   operadora_id?: number;
+  operadora_ids?: number[];
 }
 
 export interface ClinicaUpdateInput {
@@ -186,6 +191,7 @@ export interface ClinicaUpdateInput {
   senha?: string;
   status?: ClinicStatus;
   operadora_id?: number;
+  operadora_ids?: number[];
 }
 
 export interface ClinicaProfile {

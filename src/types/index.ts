@@ -118,6 +118,11 @@ export interface PacienteUpdateInput {
   endereco_cep?: string;
   peso?: number;
   altura?: number;
+  // Campos do médico assistente (responsável técnico)
+  medico_assistente_nome?: string;
+  medico_assistente_email?: string;
+  medico_assistente_telefone?: string;
+  medico_assistente_especialidade?: string;
 }
 
 export interface ApiResponse<T = any> {

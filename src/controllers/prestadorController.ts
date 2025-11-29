@@ -10,6 +10,8 @@ export class PrestadorController {
     try {
       const { clinica_id } = req.query;
 
+      console.log(`🔍 [PrestadorController.getPrestadoresByClinica] Buscando prestadores para clinica_id=${clinica_id}`);
+
       if (!clinica_id) {
         res.status(400).json({
           success: false,
@@ -20,16 +22,24 @@ export class PrestadorController {
 
       const prestadores = await PrestadorModel.findByClinicaId(Number(clinica_id));
 
+      console.log(`✅ [PrestadorController.getPrestadoresByClinica] Encontrados ${prestadores.length} prestadores`);
+
       res.json({
         success: true,
         message: 'Prestadores encontrados',
         data: prestadores
       });
     } catch (error) {
-      console.error('❌ Erro ao buscar prestadores por clínica:', error);
+      console.error('❌ [PrestadorController.getPrestadoresByClinica] Erro ao buscar prestadores por clínica:', error);
+      if (error instanceof Error) {
+        console.error('   Tipo:', error.constructor.name);
+        console.error('   Mensagem:', error.message);
+        console.error('   Stack:', error.stack);
+      }
       res.status(500).json({
         success: false,
-        message: 'Erro interno do servidor'
+        message: 'Erro interno do servidor',
+        error: error instanceof Error ? error.message : 'Erro desconhecido'
       });
     }
   }

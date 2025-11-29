@@ -359,10 +359,12 @@ export class OperadoraController {
     }
   }
 
-  // GET /api/operadoras/clinica/:clinicaId - Buscar operadora de uma clínica
+  // GET /api/operadoras/clinica/:clinicaId - Buscar operadoras de uma clínica (N:N)
   static async getOperadoraByClinica(req: Request, res: Response): Promise<void> {
     try {
       const clinicaId = parseInt(req.params.clinicaId);
+
+      console.log(`🔍 [OperadoraController.getOperadoraByClinica] Buscando operadoras para clinica_id=${clinicaId}`);
 
       if (isNaN(clinicaId)) {
         res.status(400).json({
@@ -372,39 +374,43 @@ export class OperadoraController {
         return;
       }
 
-      // Buscar a operadora da clínica
+      // Buscar as operadoras da clínica usando a tabela de relacionamento N:N
       const sql = `
         SELECT o.* 
         FROM operadoras o
-        INNER JOIN clinicas c ON c.operadora_id = o.id
-        WHERE c.id = ? AND o.status = 'ativo'
-        LIMIT 1
+        INNER JOIN clinicas_operadoras co ON co.operadora_id = o.id
+        WHERE co.clinica_id = ? AND co.status = 'ativo' AND o.status = 'ativo'
+        ORDER BY o.nome ASC
       `;
 
       const operadoras = await query(sql, [clinicaId]);
 
+      console.log(`✅ [OperadoraController.getOperadoraByClinica] Encontradas ${operadoras.length} operadoras para clinica_id=${clinicaId}`);
+
+      // Retornar todas as operadoras (agora uma clínica pode ter múltiplas)
+      // Para compatibilidade, retornamos a primeira se existir, ou todas
+      const response: ApiResponse = {
+        success: true,
+        message: operadoras.length > 0 ? 'Operadoras encontradas' : 'Nenhuma operadora encontrada para esta clínica',
+        data: operadoras.length > 0 ? (operadoras.length === 1 ? operadoras[0] : operadoras) : null
+      };
+
       if (operadoras.length === 0) {
-        res.status(404).json({
-          success: false,
-          message: 'Operadora não encontrada para esta clínica'
-        });
+        res.status(404).json(response);
         return;
       }
 
-      const operadora = operadoras[0];
-
-      const response: ApiResponse = {
-        success: true,
-        message: 'Operadora encontrada',
-        data: operadora
-      };
-
       res.json(response);
     } catch (error) {
-      console.error('❌ Erro ao buscar operadora da clínica:', error);
+      console.error('❌ [OperadoraController.getOperadoraByClinica] Erro ao buscar operadoras da clínica:', error);
+      if (error instanceof Error) {
+        console.error('   Tipo:', error.constructor.name);
+        console.error('   Mensagem:', error.message);
+        console.error('   Stack:', error.stack);
+      }
       const response: ApiResponse = {
         success: false,
-        message: 'Erro ao buscar operadora da clínica',
+        message: 'Erro ao buscar operadoras da clínica',
         error: error instanceof Error ? error.message : 'Erro desconhecido'
       };
       res.status(500).json(response);

@@ -20,19 +20,9 @@ export const dbConfig = {
   keepAliveInitialDelay: 10000, // 10 segundos
   enableKeepAlive: true,
 
-  // Timeouts para evitar conexões travadas
-  acquireTimeout: 30000, // 30 segundos
-  timeout: 60000, // 60 segundos para queries mais lentas
+  // Timeouts suportados
   connectTimeout: 10000, // 10 segundos para conectar
 
-  // Configurações de reconexão automática
-  reconnect: true,
-
-  // Configurações MySQL para evitar ECONNRESET
-  waitTimeout: 28800, // 8 horas (padrão MySQL)
-  maxIdle: 10, // Máximo de conexões ociosas
-  idleTimeout: 60000, // 60 segundos antes de fechar conexão ociosa
-  
   // Configurações de performance
   multipleStatements: false, // Desabilitar múltiplas statements por segurança
   dateStrings: true, // Retornar datas como strings
@@ -54,9 +44,6 @@ export const logsDbConfig = {
   waitForConnections: true,
   connectionLimit: 10, // Pool menor para logs
   queueLimit: 0,
-  acquireTimeout: 60000,
-  timeout: 60000,
-  reconnect: true,
   multipleStatements: false,
   dateStrings: true,
   timezone: '-03:00', // Timezone de Brasília (UTC-3)
@@ -216,8 +203,34 @@ export const testConnection = async (): Promise<boolean> => {
   }
 };
 
+// Função para verificar e recriar pool se necessário
+const ensurePoolActive = async (): Promise<void> => {
+  try {
+    // Tentar obter uma conexão para verificar se o pool está ativo
+    const testConnection = await pool.getConnection();
+    testConnection.release();
+  } catch (error: any) {
+    // Se o pool estiver fechado ou inativo, recriar
+    if (error?.message?.includes('Pool is closed') || error?.code === 'POOL_CLOSED') {
+      console.warn('⚠️ Pool está fechado. Recriando pool...');
+      try {
+        await pool.end();
+      } catch (e) {
+        // Ignorar erro ao fechar pool já fechado
+      }
+      // Recriar pool
+      const newPool = mysql.createPool(dbConfig);
+      Object.assign(pool, newPool);
+      console.log('✅ Pool recriado com sucesso');
+    }
+  }
+};
+
 // Função otimizada para executar queries com timeout + retry
 export const query = async (sql: string, params?: any[]): Promise<any> => {
+  // Garantir que o pool está ativo antes de executar a query
+  await ensurePoolActive();
+  
   return withRetry(async () => {
     try {
       const [results] = await Promise.race([
@@ -227,7 +240,14 @@ export const query = async (sql: string, params?: any[]): Promise<any> => {
         )
       ]);
       return results;
-    } catch (error) {
+    } catch (error: any) {
+      // Se ainda houver erro de pool fechado, tentar recriar novamente
+      if (error?.message?.includes('Pool is closed') || error?.code === 'POOL_CLOSED') {
+        await ensurePoolActive();
+        // Tentar novamente após recriar o pool
+        const [results] = await pool.execute(sql, params || []);
+        return results;
+      }
       console.error('Erro na query:', error);
       throw error;
     }

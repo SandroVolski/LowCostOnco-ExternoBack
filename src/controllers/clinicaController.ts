@@ -14,6 +14,7 @@ import {
   ClinicLoginRequest
 } from '../types/clinic';
 import { ApiResponse } from '../types';
+import { ClinicaOperadoraModel } from '../models/ClinicaOperadora';
 
 interface AuthRequest extends Request {
   user?: {
@@ -758,13 +759,11 @@ export class ClinicaController {
           };
         }
 
-        // Log removido para melhor performance
-
         return {
-        id: clinica.id,
-        nome: clinica.nome,
+          id: clinica.id,
+          nome: clinica.nome,
           razao_social: clinica.razao_social || '',
-        codigo: clinica.codigo,
+          codigo: clinica.codigo,
           cnpj: clinica.cnpj || '',
           endereco: clinica.endereco || '',
           ...enderecoData,
@@ -774,10 +773,34 @@ export class ClinicaController {
           observacoes: clinica.observacoes || '',
           usuario: clinica.usuario || '',
           senha: clinica.senha || '',
-        operadora_id: clinica.operadora_id,
-        status: clinica.status || 'ativo',
+          operadora_id: clinica.operadora_id || null,
+          status: clinica.status || 'ativo',
           created_at: clinica.created_at,
           updated_at: clinica.updated_at
+        };
+      });
+
+      const clinicaIds = clinicasProcessadas
+        .map((clinica: any) => Number(clinica.id))
+        .filter((id: number) => Number.isInteger(id) && id > 0);
+
+      let operadorasMap: Record<number, any[]> = {};
+      if (clinicaIds.length > 0) {
+        operadorasMap = await ClinicaOperadoraModel.getOperadorasByClinicaIds(clinicaIds);
+      }
+
+      const clinicasComOperadoras = clinicasProcessadas.map((clinica: any) => {
+        const clinicaId = Number(clinica.id);
+        const operadoras = operadorasMap[clinicaId] || [];
+        const operadoraIds = operadoras
+          .map((op) => op.id)
+          .filter((id): id is number => typeof id === 'number');
+
+        return {
+          ...clinica,
+          operadoras,
+          operadora_ids: operadoraIds,
+          operadora_id: operadoraIds.length > 0 ? operadoraIds[0] : clinica.operadora_id
         };
       });
 
@@ -788,7 +811,7 @@ export class ClinicaController {
       const response = {
         success: true,
         message: 'Clínicas encontradas',
-        data: clinicasProcessadas,
+        data: clinicasComOperadoras,
         pagination: {
           page,
           limit,
@@ -825,10 +848,12 @@ export class ClinicaController {
         return;
       }
 
-      // Buscar clínica real do banco (usando query direto para acessar campos brutos)
-      const clinicas = await query('SELECT * FROM clinicas WHERE id = ?', [parseInt(id)]);
+      console.log(`🔍 getClinicaById: Buscando clínica ID=${id}`);
       
-      if (!clinicas || clinicas.length === 0) {
+      // Usar ClinicaModel que já faz o enriquecimento com operadoras
+      const clinicaProfile = await ClinicaModel.findById(parseInt(id));
+      
+      if (!clinicaProfile || !clinicaProfile.clinica) {
         const response: ApiResponse = {
           success: false,
           message: 'Clínica não encontrada'
@@ -837,7 +862,8 @@ export class ClinicaController {
         return;
       }
 
-      const clinica = clinicas[0] as any;
+      const clinica = clinicaProfile.clinica as any;
+      console.log(`✅ getClinicaById: Clínica encontrada, operadora_ids=[${clinica.operadora_ids?.join(', ') || 'vazio'}]`);
 
       // Processar dados da mesma forma que getAllClinicas
       let enderecoData = {};
@@ -920,10 +946,14 @@ export class ClinicaController {
         usuario: clinica.usuario || '',
         senha: clinica.senha || '',
         operadora_id: clinica.operadora_id,
+        operadora_ids: Array.isArray(clinica.operadora_ids) ? clinica.operadora_ids : [],
+        operadoras: Array.isArray(clinica.operadoras) ? clinica.operadoras : [],
         status: clinica.status || 'ativo',
         created_at: clinica.created_at,
         updated_at: clinica.updated_at
       };
+      
+      console.log(`📤 getClinicaById: Retornando clínica com operadora_ids=[${clinicaProcessada.operadora_ids.join(', ')}]`);
 
       const response: ApiResponse = {
         success: true,
@@ -947,6 +977,25 @@ export class ClinicaController {
   static async createClinica(req: Request, res: Response): Promise<void> {
     try {
       const clinicaData: ClinicaCreateInput = req.body;
+
+      if (clinicaData.operadora_ids !== undefined && !Array.isArray(clinicaData.operadora_ids)) {
+        clinicaData.operadora_ids = [Number(clinicaData.operadora_ids)].filter(id => Number.isInteger(id));
+      }
+
+      if (Array.isArray(clinicaData.operadora_ids)) {
+        clinicaData.operadora_ids = clinicaData.operadora_ids
+          .map((id) => Number(id))
+          .filter((id) => Number.isInteger(id) && id > 0);
+      }
+
+      if ((!clinicaData.operadora_ids || clinicaData.operadora_ids.length === 0) && clinicaData.operadora_id) {
+        clinicaData.operadora_ids = [clinicaData.operadora_id];
+      }
+
+      const primaryOperadoraId = clinicaData.operadora_ids && clinicaData.operadora_ids.length > 0
+        ? clinicaData.operadora_ids[0]
+        : clinicaData.operadora_id;
+      clinicaData.operadora_id = primaryOperadoraId;
 
       // Validações básicas
       if (!clinicaData.nome || !clinicaData.codigo) {
@@ -991,7 +1040,7 @@ export class ClinicaController {
             clinicaData.usuario, 
             clinicaData.senha, 
             novaClinica.id,
-            clinicaData.operadora_id || null,
+            novaClinica.operadora_id || null,
             clinicaData.nome // Adicionar o nome da clínica como nome do usuário
           ]);
         } catch (userError) {
@@ -1025,7 +1074,7 @@ export class ClinicaController {
   static async updateClinica(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const updateData = req.body;
+      const updateData: ClinicaUpdateInput = req.body;
 
       if (!id) {
         const response: ApiResponse = {
@@ -1036,9 +1085,31 @@ export class ClinicaController {
         return;
       }
 
-      // Verificar se a clínica existe
-      const clinicas = await query('SELECT * FROM clinicas WHERE id = ?', [parseInt(id)]);
-      if (!clinicas || clinicas.length === 0) {
+      // Só criptografar senha se ela não for um hash bcrypt (não começa com $2a$ ou $2b$)
+      if (updateData.senha && !updateData.senha.startsWith('$2a$') && !updateData.senha.startsWith('$2b$')) {
+        updateData.senha = await bcrypt.hash(updateData.senha, 10);
+      } else if (updateData.senha && (updateData.senha.startsWith('$2a$') || updateData.senha.startsWith('$2b$'))) {
+        // Se já é hash, remove do updateData para não sobrescrever
+        delete updateData.senha;
+      }
+
+      if (updateData.operadora_ids !== undefined && !Array.isArray(updateData.operadora_ids)) {
+        updateData.operadora_ids = [Number(updateData.operadora_ids)].filter(idValue => Number.isInteger(idValue));
+      }
+
+      if (Array.isArray(updateData.operadora_ids)) {
+        updateData.operadora_ids = updateData.operadora_ids
+          .map((idValue) => Number(idValue))
+          .filter((idValue) => Number.isInteger(idValue) && idValue > 0);
+      }
+
+      if ((!updateData.operadora_ids || updateData.operadora_ids.length === 0) && updateData.operadora_id !== undefined && updateData.operadora_id !== null) {
+        updateData.operadora_ids = [updateData.operadora_id];
+      }
+
+      const updatedClinica = await ClinicaModel.update(Number(id), updateData);
+
+      if (!updatedClinica) {
         const response: ApiResponse = {
           success: false,
           message: 'Clínica não encontrada'
@@ -1047,183 +1118,15 @@ export class ClinicaController {
         return;
       }
 
-      // Preparar dados para atualização
-      const updateFields = [];
-      const updateValues = [];
+      const primaryOperadoraId = updatedClinica.operadora_id ?? null;
+      await query('UPDATE usuarios SET operadora_id = ? WHERE clinica_id = ?', [primaryOperadoraId, Number(id)]);
 
-      // Campos que podem ser atualizados
-      const allowedFields = [
-        'nome', 'razao_social', 'codigo', 'cnpj', 'website', 'logo_url', 
-        'observacoes', 'usuario', 'senha', 'status', 'operadora_id'
-      ];
-
-      for (const field of allowedFields) {
-        if (updateData.hasOwnProperty(field) && updateData[field] !== undefined) {
-          updateFields.push(`${field} = ?`);
-          updateValues.push(updateData[field]);
-        }
-      }
-
-      // Processar telefones e emails se fornecidos
-      if (updateData.telefones || updateData.emails) {
-        const contatos = await query('SELECT contatos FROM clinicas WHERE id = ?', [parseInt(id)]);
-        let contatosObj: any = {};
-        
-        if (contatos && contatos[0] && contatos[0].contatos) {
-          try {
-            contatosObj = typeof contatos[0].contatos === 'string'
-              ? JSON.parse(contatos[0].contatos)
-              : contatos[0].contatos;
-          } catch (error) {
-            console.warn('Erro ao parsear contatos existentes:', error);
-          }
-        }
-
-        // Atualizar contatos de pacientes
-        if (!contatosObj.pacientes) {
-          contatosObj.pacientes = { telefones: [''], emails: [''] };
-        }
-        
-        if (updateData.telefones) {
-          contatosObj.pacientes.telefones = updateData.telefones;
-        }
-        if (updateData.emails) {
-          contatosObj.pacientes.emails = updateData.emails;
-        }
-
-        updateFields.push('contatos = ?');
-        updateValues.push(JSON.stringify(contatosObj));
-      }
-
-      // Processar endereço se fornecido
-      if (updateData.endereco_rua || updateData.endereco_numero || updateData.endereco_bairro || 
-          updateData.endereco_complemento || updateData.cidade || updateData.estado || updateData.cep) {
-        
-        const enderecoCompleto = {
-          rua: updateData.endereco_rua || '',
-          numero: updateData.endereco_numero || '',
-          bairro: updateData.endereco_bairro || '',
-          complemento: updateData.endereco_complemento || '',
-          cidade: updateData.cidade || '',
-          estado: updateData.estado || '',
-          cep: updateData.cep || ''
-        };
-
-        updateFields.push('endereco_completo = ?');
-        updateValues.push(JSON.stringify(enderecoCompleto));
-      }
-
-      if (updateFields.length === 0) {
-        const response: ApiResponse = {
-          success: false,
-          message: 'Nenhum campo válido para atualização'
-        };
-        res.status(400).json(response);
-        return;
-      }
-
-      // Adicionar timestamp de atualização
-      updateFields.push('updated_at = CURRENT_TIMESTAMP');
-      updateValues.push(parseInt(id));
-
-      // Executar atualização
-      const sql = `UPDATE clinicas SET ${updateFields.join(', ')} WHERE id = ?`;
-
-      await query(sql, updateValues);
-
-      // Buscar clínica atualizada
-      const clinicasAtualizadas = await query('SELECT * FROM clinicas WHERE id = ?', [parseInt(id)]);
-      const clinicaAtualizada = clinicasAtualizadas[0] as any;
-
-      // Processar dados da mesma forma que getAllClinicas
-      let enderecoData = {};
-      if (clinicaAtualizada.endereco_completo) {
-        try {
-          const enderecoObj = typeof clinicaAtualizada.endereco_completo === 'string'
-            ? JSON.parse(clinicaAtualizada.endereco_completo)
-            : clinicaAtualizada.endereco_completo;
-          
-          enderecoData = {
-            endereco_rua: enderecoObj.rua || '',
-            endereco_numero: enderecoObj.numero || '',
-            endereco_bairro: enderecoObj.bairro || '',
-            endereco_complemento: enderecoObj.complemento || '',
-            cidade: enderecoObj.cidade || '',
-            estado: enderecoObj.estado || '',
-            cep: enderecoObj.cep || ''
-          };
-        } catch (error) {
-          console.warn('Erro ao processar endereco_completo JSON:', error);
-        }
-      }
-
-      let contatosData = {};
-      if (clinicaAtualizada.contatos) {
-        try {
-          const contatosObj = typeof clinicaAtualizada.contatos === 'string'
-            ? JSON.parse(clinicaAtualizada.contatos)
-            : clinicaAtualizada.contatos;
-          
-          const telefones = contatosObj.pacientes?.telefones || [];
-          const emails = contatosObj.pacientes?.emails || [];
-          
-          contatosData = {
-            telefones: telefones.length > 0 ? telefones : [''],
-            emails: emails.length > 0 ? emails : [''],
-            contatos_pacientes: contatosObj.pacientes || { telefones: [''], emails: [''] },
-            contatos_administrativos: contatosObj.administrativos || { telefones: [''], emails: [''] },
-            contatos_legais: contatosObj.legais || { telefones: [''], emails: [''] },
-            contatos_faturamento: contatosObj.faturamento || { telefones: [''], emails: [''] },
-            contatos_financeiro: contatosObj.financeiro || { telefones: [''], emails: [''] }
-          };
-        } catch (error) {
-          console.warn('Erro ao processar contatos JSON:', error);
-          contatosData = {
-            telefones: [''],
-            emails: [''],
-            contatos_pacientes: { telefones: [''], emails: [''] },
-            contatos_administrativos: { telefones: [''], emails: [''] },
-            contatos_legais: { telefones: [''], emails: [''] },
-            contatos_faturamento: { telefones: [''], emails: [''] },
-            contatos_financeiro: { telefones: [''], emails: [''] }
-          };
-        }
-      } else {
-        contatosData = {
-          telefones: Array.isArray(clinicaAtualizada.telefones) ? clinicaAtualizada.telefones : (clinicaAtualizada.telefone ? [clinicaAtualizada.telefone] : ['']),
-          emails: Array.isArray(clinicaAtualizada.emails) ? clinicaAtualizada.emails : (clinicaAtualizada.email ? [clinicaAtualizada.email] : ['']),
-          contatos_pacientes: { telefones: [''], emails: [''] },
-          contatos_administrativos: { telefones: [''], emails: [''] },
-          contatos_legais: { telefones: [''], emails: [''] },
-          contatos_faturamento: { telefones: [''], emails: [''] },
-          contatos_financeiro: { telefones: [''], emails: [''] }
-        };
-      }
-
-      const clinicaProcessada = {
-        id: clinicaAtualizada.id,
-        nome: clinicaAtualizada.nome,
-        razao_social: clinicaAtualizada.razao_social || '',
-        codigo: clinicaAtualizada.codigo,
-        cnpj: clinicaAtualizada.cnpj || '',
-        endereco: clinicaAtualizada.endereco || '',
-        ...enderecoData,
-        ...contatosData,
-        website: clinicaAtualizada.website || '',
-        logo_url: clinicaAtualizada.logo_url || '',
-        observacoes: clinicaAtualizada.observacoes || '',
-        usuario: clinicaAtualizada.usuario || '',
-        senha: clinicaAtualizada.senha || '',
-        operadora_id: clinicaAtualizada.operadora_id,
-        status: clinicaAtualizada.status || 'ativo',
-        created_at: clinicaAtualizada.created_at,
-        updated_at: clinicaAtualizada.updated_at
-      };
+      const { senha, ...clinicaResponse } = updatedClinica as any;
 
       const response: ApiResponse = {
         success: true,
         message: 'Clínica atualizada com sucesso',
-        data: clinicaProcessada
+        data: clinicaResponse
       };
 
       res.json(response);

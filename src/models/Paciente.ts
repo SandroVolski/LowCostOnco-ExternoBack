@@ -165,7 +165,7 @@ export class PacienteModel {
         rt.nome as medico_assistente_nome,
         rt.email as medico_assistente_email,
         rt.telefone as medico_assistente_telefone,
-        rt.especialidade as medico_assistente_especialidade
+        rt.especialidade_principal as medico_assistente_especialidade
       FROM pacientes p
       LEFT JOIN operadoras o ON p.operadora_id = o.id
       LEFT JOIN responsaveis_tecnicos rt ON p.prestador_id = rt.id
@@ -224,7 +224,7 @@ export class PacienteModel {
         rt.nome as medico_assistente_nome,
         rt.email as medico_assistente_email,
         rt.telefone as medico_assistente_telefone,
-        rt.especialidade as medico_assistente_especialidade
+        rt.especialidade_principal as medico_assistente_especialidade
       FROM pacientes p
       LEFT JOIN operadoras o ON p.operadora_id = o.id
       LEFT JOIN responsaveis_tecnicos rt ON p.prestador_id = rt.id
@@ -265,7 +265,7 @@ export class PacienteModel {
         rt.nome as medico_assistente_nome,
         rt.email as medico_assistente_email,
         rt.telefone as medico_assistente_telefone,
-        rt.especialidade as medico_assistente_especialidade
+        rt.especialidade_principal as medico_assistente_especialidade
       FROM pacientes p
       LEFT JOIN operadoras o ON p.operadora_id = o.id
       LEFT JOIN responsaveis_tecnicos rt ON p.prestador_id = rt.id
@@ -486,6 +486,9 @@ export class PacienteModel {
   
   // Atualizar paciente
   static async update(id: number, pacienteData: PacienteUpdateInput): Promise<Paciente | null> {
+    console.log(`🔍 [PacienteModel.update] Iniciando atualização do paciente ID=${id}`);
+    console.log(`📥 [PacienteModel.update] Dados recebidos:`, JSON.stringify(pacienteData, null, 2));
+    
     // Mapeamento de campos do frontend (maiúsculas) para banco (minúsculas)
     const fieldMapping: Record<string, string> = {
       'Paciente_Nome': 'nome',
@@ -513,9 +516,158 @@ export class PacienteModel {
       contato_emergencia: {}
     };
 
+    // Processar médico assistente (responsável técnico) ANTES do loop principal
+    let prestadorIdToUpdate: number | null = null;
+    let medicoAssistenteProcessado = false;
+    
+    // Se Prestador (ID) foi fornecido, usar esse ID e atualizar os campos do prestador
+    if (pacienteData.Prestador) {
+      const prestadorId = typeof pacienteData.Prestador === 'number' 
+        ? pacienteData.Prestador 
+        : parseInt(pacienteData.Prestador);
+      
+      if (!isNaN(prestadorId)) {
+        console.log(`🔍 [PacienteModel.update] Prestador ID fornecido: ${prestadorId}`);
+        prestadorIdToUpdate = prestadorId;
+        medicoAssistenteProcessado = true;
+        
+        // Atualizar dados do responsável técnico se campos foram fornecidos
+        const updateResponsavelFields: string[] = [];
+        const updateResponsavelValues: any[] = [];
+        
+        // Atualizar nome se fornecido
+        if (pacienteData.medico_assistente_nome !== undefined && pacienteData.medico_assistente_nome.trim() !== '') {
+          updateResponsavelFields.push('nome = ?');
+          updateResponsavelValues.push(pacienteData.medico_assistente_nome.trim());
+        }
+        
+        // Sempre atualizar os campos se foram fornecidos (mesmo que vazios, para limpar valores)
+        if (pacienteData.medico_assistente_email !== undefined) {
+          updateResponsavelFields.push('email = ?');
+          updateResponsavelValues.push(pacienteData.medico_assistente_email === '' ? null : pacienteData.medico_assistente_email);
+        }
+        if (pacienteData.medico_assistente_telefone !== undefined) {
+          updateResponsavelFields.push('telefone = ?');
+          updateResponsavelValues.push(pacienteData.medico_assistente_telefone === '' ? null : pacienteData.medico_assistente_telefone);
+        }
+        if (pacienteData.medico_assistente_especialidade !== undefined) {
+          updateResponsavelFields.push('especialidade_principal = ?');
+          // especialidade_principal não aceita NULL, usar string vazia se vazio
+          updateResponsavelValues.push(pacienteData.medico_assistente_especialidade === '' || pacienteData.medico_assistente_especialidade === null ? '' : pacienteData.medico_assistente_especialidade);
+        }
+        
+        if (updateResponsavelFields.length > 0) {
+          updateResponsavelValues.push(prestadorIdToUpdate);
+          const updateResponsavelQuery = `
+            UPDATE responsaveis_tecnicos 
+            SET ${updateResponsavelFields.join(', ')}, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `;
+          await query(updateResponsavelQuery, updateResponsavelValues);
+          console.log(`✅ [PacienteModel.update] Responsável técnico atualizado (ID: ${prestadorIdToUpdate})`);
+        }
+        
+        // Atualizar prestador_id do paciente
+        dataToUpdate['prestador_id'] = prestadorIdToUpdate;
+        console.log(`✅ [PacienteModel.update] prestador_id atualizado para: ${prestadorIdToUpdate}`);
+      }
+    } else if (pacienteData.medico_assistente_nome) {
+      // Se apenas medico_assistente_nome foi fornecido (sem Prestador ID), processar como antes
+      console.log(`🔍 [PacienteModel.update] Processando médico assistente: ${pacienteData.medico_assistente_nome}`);
+      
+      // Buscar paciente atual para obter clinica_id
+      const pacienteAtual = await this.findById(id);
+      if (!pacienteAtual) {
+        throw new Error('Paciente não encontrado');
+      }
+      
+      const clinicaId = pacienteAtual.clinica_id;
+      console.log(`🔍 [PacienteModel.update] Clinica ID do paciente: ${clinicaId}`);
+      
+      // Buscar responsável técnico existente pelo nome na mesma clínica
+      const buscarResponsavelQuery = `
+        SELECT id FROM responsaveis_tecnicos 
+        WHERE nome = ? AND clinica_id = ? AND status = 'ativo'
+        LIMIT 1
+      `;
+      const responsaveisExistentes = await query(buscarResponsavelQuery, [pacienteData.medico_assistente_nome.trim(), clinicaId]);
+      
+      if (responsaveisExistentes.length > 0) {
+        // Responsável já existe, usar o ID existente
+        prestadorIdToUpdate = responsaveisExistentes[0].id;
+        console.log(`✅ [PacienteModel.update] Responsável técnico encontrado com ID: ${prestadorIdToUpdate}`);
+        
+        // Atualizar dados do responsável técnico se outros campos foram fornecidos
+        const updateResponsavelFields: string[] = [];
+        const updateResponsavelValues: any[] = [];
+        
+        // Sempre atualizar os campos se foram fornecidos (mesmo que vazios, para limpar valores)
+        if (pacienteData.medico_assistente_email !== undefined) {
+          updateResponsavelFields.push('email = ?');
+          updateResponsavelValues.push(pacienteData.medico_assistente_email === '' ? null : pacienteData.medico_assistente_email);
+        }
+        if (pacienteData.medico_assistente_telefone !== undefined) {
+          updateResponsavelFields.push('telefone = ?');
+          updateResponsavelValues.push(pacienteData.medico_assistente_telefone === '' ? null : pacienteData.medico_assistente_telefone);
+        }
+        if (pacienteData.medico_assistente_especialidade !== undefined) {
+          updateResponsavelFields.push('especialidade_principal = ?');
+          // especialidade_principal não aceita NULL, usar string vazia se vazio
+          updateResponsavelValues.push(pacienteData.medico_assistente_especialidade === '' || pacienteData.medico_assistente_especialidade === null ? '' : pacienteData.medico_assistente_especialidade);
+        }
+        
+        if (updateResponsavelFields.length > 0) {
+          updateResponsavelValues.push(prestadorIdToUpdate);
+          const updateResponsavelQuery = `
+            UPDATE responsaveis_tecnicos 
+            SET ${updateResponsavelFields.join(', ')}, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `;
+          await query(updateResponsavelQuery, updateResponsavelValues);
+          console.log(`✅ [PacienteModel.update] Responsável técnico atualizado`);
+        }
+      } else {
+        // Criar novo responsável técnico
+        console.log(`🆕 [PacienteModel.update] Criando novo responsável técnico`);
+        const insertResponsavelQuery = `
+          INSERT INTO responsaveis_tecnicos (
+            clinica_id, nome, tipo_profissional, registro_conselho, uf_registro,
+            especialidade_principal, telefone, email, responsavel_tecnico, status, crm, created_at, updated_at
+          ) VALUES (?, ?, 'medico', '', '', ?, ?, ?, 0, 'ativo', '', NOW(), NOW())
+        `;
+        const insertValues = [
+          clinicaId,
+          pacienteData.medico_assistente_nome.trim(),
+          pacienteData.medico_assistente_especialidade || '',
+          pacienteData.medico_assistente_telefone || null,
+          pacienteData.medico_assistente_email || null
+        ];
+        const insertResult = await query(insertResponsavelQuery, insertValues);
+        prestadorIdToUpdate = insertResult.insertId;
+        console.log(`✅ [PacienteModel.update] Novo responsável técnico criado com ID: ${prestadorIdToUpdate}`);
+      }
+      
+      // Atualizar prestador_id do paciente
+      if (prestadorIdToUpdate) {
+        dataToUpdate['prestador_id'] = prestadorIdToUpdate;
+        console.log(`✅ [PacienteModel.update] prestador_id atualizado para: ${prestadorIdToUpdate}`);
+      } else {
+        console.log(`⚠️ [PacienteModel.update] prestadorIdToUpdate é null, não atualizando prestador_id`);
+      }
+      
+      medicoAssistenteProcessado = true;
+    }
+    
+    // medicoAssistenteProcessado já foi definido acima
+    
     // Aplicar mapeamento e normalizações
     for (const [key, value] of Object.entries(pacienteData)) {
       if (value === undefined || value === null || value === '') continue;
+      
+      // Ignorar campos de médico assistente (já processados acima)
+      if (key.startsWith('medico_assistente_')) {
+        continue;
+      }
       
       // Verificar se é um campo JSON
       let isJsonField = false;
@@ -572,8 +724,22 @@ export class PacienteModel {
           const operadoraId = await resolveIdByName('Operadoras', value as string | number, 1);
           dataToUpdate['operadora_id'] = operadoraId;
         } else if (key === 'Prestador') {
-          const prestadorId = await resolveIdByName('Prestadores', value as string | number, 1);
-          dataToUpdate['prestador_id'] = prestadorId;
+          // Se médico assistente já foi processado, ignorar Prestador
+          if (!medicoAssistenteProcessado) {
+            // Se o valor é um número, usar diretamente como ID
+            if (typeof value === 'number' || (typeof value === 'string' && !isNaN(parseInt(value)))) {
+              const prestadorId = typeof value === 'number' ? value : parseInt(value);
+              dataToUpdate['prestador_id'] = prestadorId;
+              console.log(`✅ [PacienteModel.update] prestador_id definido via campo Prestador (ID): ${prestadorId}`);
+            } else {
+              // Se é string (nome), tentar resolver por nome
+              const prestadorId = await resolveIdByName('Prestadores', value as string, 1);
+              dataToUpdate['prestador_id'] = prestadorId;
+              console.log(`✅ [PacienteModel.update] prestador_id definido via campo Prestador (nome): ${prestadorId}`);
+            }
+          } else {
+            console.log(`⏭️ [PacienteModel.update] Campo Prestador ignorado (médico assistente já processado, prestador_id=${prestadorIdToUpdate})`);
+          }
         } else if (key === 'Cid_Diagnostico') {
           dataToUpdate['cid_diagnostico'] = Array.isArray(value) ? value.join(', ') : value;
         } else {
@@ -597,14 +763,23 @@ export class PacienteModel {
     const updateFields: string[] = [];
     const values: any[] = [];
 
+    console.log(`📊 [PacienteModel.update] dataToUpdate antes de construir query:`, JSON.stringify(dataToUpdate, null, 2));
+
     Object.entries(dataToUpdate).forEach(([key, value]) => {
       if (value !== undefined) {
         updateFields.push(`${key} = ?`);
         values.push(value);
+        console.log(`  ✅ Campo adicionado: ${key} = ${value}`);
+      } else {
+        console.log(`  ⏭️ Campo ignorado (undefined): ${key}`);
       }
     });
 
+    console.log(`📋 [PacienteModel.update] Total de campos para atualizar: ${updateFields.length}`);
+    console.log(`📋 [PacienteModel.update] Campos: ${updateFields.join(', ')}`);
+
     if (updateFields.length === 0) {
+      console.error('❌ [PacienteModel.update] Nenhum campo para atualizar!');
       throw new Error('Nenhum campo para atualizar');
     }
 
@@ -616,17 +791,31 @@ export class PacienteModel {
 
     values.push(id);
 
+    console.log(`🔧 [PacienteModel.update] Query SQL:`, updateQuery);
+    console.log(`🔧 [PacienteModel.update] Valores:`, values);
+
     try {
       const result = await query(updateQuery, values);
       
+      console.log(`📊 [PacienteModel.update] Resultado da query: affectedRows=${result.affectedRows}`);
+      
       if (result.affectedRows === 0) {
+        console.error('❌ [PacienteModel.update] Nenhuma linha foi afetada pela atualização');
         return null; // Paciente não encontrado
       }
       
+      console.log(`✅ [PacienteModel.update] Atualização bem-sucedida, buscando paciente atualizado...`);
       // Buscar o paciente atualizado
-      return await this.findById(id);
+      const pacienteAtualizado = await this.findById(id);
+      console.log(`✅ [PacienteModel.update] Paciente atualizado recuperado`);
+      return pacienteAtualizado;
     } catch (error) {
-      console.error('Erro ao atualizar paciente:', error);
+      console.error('❌ [PacienteModel.update] Erro ao executar query:', error);
+      if (error instanceof Error) {
+        console.error('   Tipo:', error.constructor.name);
+        console.error('   Mensagem:', error.message);
+        console.error('   Stack:', error.stack);
+      }
       throw new Error('Erro ao atualizar paciente');
     }
   }
@@ -665,12 +854,15 @@ export class PacienteModel {
     }
   }
 
-  // Buscar pacientes por operadora (via clínicas vinculadas)
+  // Buscar pacientes por operadora (via clínicas vinculadas - N:N)
   static async findByOperadoraId(operadoraId: number, params: PaginationParams): Promise<PaginatedResponse<Paciente>> {
     const { page = 1, limit = 10, search = '' } = params;
     const offset = (page - 1) * limit;
 
-    let whereClause = `WHERE c.operadora_id = ?`;
+    console.log(`🔍 [PacienteModel.findByOperadoraId] Buscando pacientes para operadora_id=${operadoraId}`);
+
+    // Usar a tabela clinicas_operadoras para o relacionamento N:N
+    let whereClause = `WHERE co.operadora_id = ? AND co.status = 'ativo'`;
     const searchParams: any[] = [operadoraId];
 
     if (search && search.trim() !== '') {
@@ -684,7 +876,8 @@ export class PacienteModel {
         p.*, c.nome as clinica_nome, c.codigo as clinica_codigo, o.nome as operadora_nome
       FROM pacientes p
       INNER JOIN clinicas c ON p.clinica_id = c.id
-      LEFT JOIN operadoras o ON c.operadora_id = o.id
+      INNER JOIN clinicas_operadoras co ON co.clinica_id = c.id
+      LEFT JOIN operadoras o ON o.id = co.operadora_id
       ${whereClause}
       ORDER BY p.created_at DESC
     `;
@@ -693,6 +886,7 @@ export class PacienteModel {
       SELECT COUNT(*) as total 
       FROM pacientes p 
       INNER JOIN clinicas c ON p.clinica_id = c.id
+      INNER JOIN clinicas_operadoras co ON co.clinica_id = c.id
       ${whereClause}
     `;
 
@@ -739,14 +933,15 @@ export class PacienteModel {
     }
   }
 
-  // Contar pacientes por operadora
+  // Contar pacientes por operadora (N:N)
   static async countByOperadora(operadoraId: number): Promise<number> {
     try {
       const queryStr = `
         SELECT COUNT(*) as count 
         FROM pacientes p
         INNER JOIN clinicas c ON p.clinica_id = c.id
-        WHERE c.operadora_id = ?
+        INNER JOIN clinicas_operadoras co ON co.clinica_id = c.id
+        WHERE co.operadora_id = ? AND co.status = 'ativo'
       `;
       const result = await query(queryStr, [operadoraId]);
       return result[0]?.count || 0;

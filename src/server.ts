@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import multer from 'multer';
 import path from 'path';
 import { testConnection, closePool } from './config/database';
+import { initMedicoAuthTable } from './utils/initMedicoAuthTable';
 import pacienteRoutes from './routes/pacienteRoutes';
 import solicitacaoRoutes from './routes/solicitacaoRoutes';
 import clinicaRoutes from './routes/clinicaRoutes';
@@ -36,6 +37,7 @@ import auditorRoutes from './routes/auditorRoutes';
 import operadoraRecursosRoutes from './routes/operadoraRecursosRoutes';
 import adminAuditoresRoutes from './routes/adminAuditoresRoutes';
 import tabelaPrecosRoutes from './routes/tabelaPrecosRoutes';
+import medicoAuthRoutes from './routes/medicoAuthRoutes';
 import { authenticateAdmin } from './middleware/authAdmin';
 
 // Carregar variáveis de ambiente
@@ -120,8 +122,15 @@ app.use(rateLimit());
 // Middleware de cache headers
 app.use(cacheHeaders);
 
-// Middleware de log para debug
+// Middleware de log para debug (terminal)
 app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    const statusColor = res.statusCode >= 500 ? '\x1b[31m' : res.statusCode >= 400 ? '\x1b[33m' : '\x1b[32m';
+    const reset = '\x1b[0m';
+    console.log(`${statusColor}${req.method}${reset} ${req.path} ${statusColor}${res.statusCode}${reset} ${duration}ms`);
+  });
   next();
 });
 
@@ -188,6 +197,7 @@ app.use('/api/clinicas', cacheMiddleware(), clinicaRoutes);
 app.use('/api/protocolos', authenticateToken, cacheMiddleware(), protocoloRoutes);
 app.use('/api/notificacoes', authenticateToken, cacheMiddleware(), notificacaoRoutes);
 app.use('/api/auth', cacheMiddleware(), authRoutes);
+app.use('/api/medico-auth', authenticateToken, cacheMiddleware(), medicoAuthRoutes);
 app.use('/api/catalog', optionalAuth, cacheMiddleware(), catalogRoutes);
 app.use('/api/performance', performanceRoutes);
 app.use('/api/ajustes', authenticateToken, ajusteRoutes);
@@ -294,9 +304,18 @@ const startServer = async () => {
     
     if (!isDbConnected) {
       console.error('❌ Não foi possível conectar ao banco de dados');
+    } else {
+      // Inicializar tabela de autenticação médica OTP
+      await initMedicoAuthTable();
     }
     
-    app.listen(PORT, () => {});
+    app.listen(PORT, () => {
+      console.log(`\n🚀 Servidor rodando na porta ${PORT}`);
+      console.log(`📍 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`✅ Banco de dados: ${isDbConnected ? 'Conectado' : 'Desconectado'}`);
+      console.log(`🔗 CORS habilitado para: ${corsOrigins.join(', ')}`);
+      console.log(`\n⏰ Heartbeat ativo - Logs de requisições abaixo:\n`);
+    });
     
   } catch (error) {
     console.error('❌ Erro ao iniciar servidor:', error);

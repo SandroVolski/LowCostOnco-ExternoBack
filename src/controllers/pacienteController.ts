@@ -21,10 +21,16 @@ export class PacienteController {
       const limit = parseInt(req.query.limit as string) || 10;
       const search = req.query.search as string || '';
 
+      console.log(`🔍 [PacienteController.index] Listando pacientes - page=${page}, limit=${limit}, search="${search}"`);
+
       // Se usuário é operadora, listar por operadoraId
       const user: any = req.user;
+      console.log(`👤 [PacienteController.index] Usuário:`, { tipo: user?.tipo, operadoraId: user?.operadoraId, clinicaId: user?.clinicaId, id: user?.id });
+      
       if (user?.tipo === 'operadora' && user?.operadoraId) {
+        console.log(`🔄 [PacienteController.index] Buscando pacientes por operadora_id=${user.operadoraId}`);
         const result = await PacienteModel.findByOperadoraId(user.operadoraId, { page, limit, search });
+        console.log(`✅ [PacienteController.index] Encontrados ${result.data?.length || 0} pacientes`);
         const response: ApiResponse = {
           success: true,
           message: 'Pacientes encontrados com sucesso',
@@ -37,6 +43,7 @@ export class PacienteController {
       const clinicaId = user?.clinicaId || user?.id || null;
 
       if (!clinicaId) {
+        console.log(`❌ [PacienteController.index] Clínica não identificada no token`);
         const response: ApiResponse = {
           success: false,
           message: 'Clínica não identificada no token'
@@ -45,12 +52,9 @@ export class PacienteController {
         return;
       }
 
+      console.log(`🔄 [PacienteController.index] Buscando pacientes por clinica_id=${clinicaId}`);
       const result = await PacienteModel.findByClinicaId(clinicaId, { page, limit, search });
-
-      // Debug: Verificar campos do médico assistente
-      if (result.data && result.data.length > 0) {
-        const firstPatient = result.data[0];
-      }
+      console.log(`✅ [PacienteController.index] Encontrados ${result.data?.length || 0} pacientes`);
 
       const response: ApiResponse = {
         success: true,
@@ -60,7 +64,12 @@ export class PacienteController {
 
       res.json(response);
     } catch (error) {
-      console.error('Erro ao listar pacientes:', error);
+      console.error('❌ [PacienteController.index] Erro ao listar pacientes:', error);
+      if (error instanceof Error) {
+        console.error('   Tipo:', error.constructor.name);
+        console.error('   Mensagem:', error.message);
+        console.error('   Stack:', error.stack);
+      }
       const response: ApiResponse = {
         success: false,
         message: 'Erro ao listar pacientes',
@@ -241,6 +250,10 @@ export class PacienteController {
       const pacienteData: PacienteUpdateInput = req.body;
       const clinicaId = req.user?.clinicaId || req.user?.id || null;
       
+      console.log(`🔍 [PacienteController.update] Iniciando atualização do paciente ID=${id}`);
+      console.log(`📥 [PacienteController.update] Dados recebidos:`, JSON.stringify(pacienteData, null, 2));
+      console.log(`👤 [PacienteController.update] Clinica ID do usuário: ${clinicaId}`);
+      
       if (isNaN(id)) {
         const response: ApiResponse = {
           success: false,
@@ -253,6 +266,7 @@ export class PacienteController {
       // Verificar se paciente existe
       const pacienteExists = await PacienteModel.findById(id);
       if (!pacienteExists) {
+        console.log(`❌ [PacienteController.update] Paciente ID=${id} não encontrado`);
         const response: ApiResponse = {
           success: false,
           message: 'Paciente não encontrado'
@@ -261,7 +275,10 @@ export class PacienteController {
         return;
       }
 
+      console.log(`✅ [PacienteController.update] Paciente encontrado: clinica_id=${pacienteExists.clinica_id}`);
+
       if (clinicaId && pacienteExists.clinica_id !== clinicaId) {
+        console.log(`❌ [PacienteController.update] Acesso negado: usuário clinica_id=${clinicaId}, paciente clinica_id=${pacienteExists.clinica_id}`);
         const response: ApiResponse = {
           success: false,
           message: 'Acesso negado ao paciente solicitado'
@@ -274,6 +291,7 @@ export class PacienteController {
       if (pacienteData.cpf) {
         const cpfExists = await PacienteModel.checkCpfExists(pacienteData.cpf, id);
         if (cpfExists) {
+          console.log(`❌ [PacienteController.update] CPF já existe: ${pacienteData.cpf}`);
           const response: ApiResponse = {
             success: false,
             message: 'Já existe um paciente com este CPF'
@@ -283,7 +301,20 @@ export class PacienteController {
         }
       }
       
+      console.log(`🔄 [PacienteController.update] Chamando PacienteModel.update...`);
       const pacienteAtualizado = await PacienteModel.update(id, pacienteData);
+      
+      if (!pacienteAtualizado) {
+        console.log(`❌ [PacienteController.update] PacienteModel.update retornou null`);
+        const response: ApiResponse = {
+          success: false,
+          message: 'Erro ao atualizar paciente - nenhuma linha foi afetada'
+        };
+        res.status(500).json(response);
+        return;
+      }
+      
+      console.log(`✅ [PacienteController.update] Paciente atualizado com sucesso`);
       
       // Invalida cache de listagens de pacientes
       invalidateCache('/api/pacientes');
@@ -296,7 +327,12 @@ export class PacienteController {
       
       res.json(response);
     } catch (error) {
-      console.error('Erro ao atualizar paciente:', error);
+      console.error('❌ [PacienteController.update] Erro ao atualizar paciente:', error);
+      if (error instanceof Error) {
+        console.error('   Tipo:', error.constructor.name);
+        console.error('   Mensagem:', error.message);
+        console.error('   Stack:', error.stack);
+      }
       const response: ApiResponse = {
         success: false,
         message: 'Erro ao atualizar paciente',

@@ -1,6 +1,8 @@
 // src/models/Clinica.ts - VERSÃO CORRIGIDA
 
 import { query } from '../config/database';
+import { ClinicaOperadoraModel } from './ClinicaOperadora';
+import { emailService } from '../services/emailService';
 import { 
   Clinica, 
   ClinicaCreateInput, 
@@ -170,6 +172,28 @@ const mockClinicas: Clinica[] = [
 
 export class ClinicaModel {
   
+  private static async enrichWithOperadoras(clinica: Clinica, clinicaId: number): Promise<void> {
+    try {
+      console.log(`🔍 enrichWithOperadoras: Buscando operadoras para clinica_id=${clinicaId}`);
+      const operadoras = await ClinicaOperadoraModel.getOperadorasByClinica(clinicaId);
+      console.log(`✅ enrichWithOperadoras: Encontradas ${operadoras.length} operadoras:`, operadoras.map(op => ({ id: op.id, nome: op.nome })));
+      
+      const operadoraIds = operadoras
+        .map((op) => op.id)
+        .filter((id): id is number => typeof id === 'number');
+
+      clinica.operadoras = operadoras;
+      clinica.operadora_ids = operadoraIds;
+      clinica.operadora_id = operadoraIds.length > 0 ? operadoraIds[0] : undefined;
+      
+      console.log(`📊 enrichWithOperadoras: Resultado final - operadora_ids=[${operadoraIds.join(', ')}], operadora_id=${clinica.operadora_id}`);
+    } catch (error) {
+      console.warn('⚠️ Erro ao carregar operadoras da clínica:', error instanceof Error ? error.message : String(error));
+      clinica.operadoras = [];
+      clinica.operadora_ids = [];
+    }
+  }
+  
   // Buscar clínica por ID com responsáveis técnicos
   static async findById(id: number): Promise<ClinicaProfile | null> {
     try {
@@ -184,6 +208,7 @@ export class ClinicaModel {
       }
       
       const clinica = processContactData(clinicResult[0]);
+      await this.enrichWithOperadoras(clinica, id);
       
       // Buscar responsáveis técnicos (novo schema) - busca TODOS, ativos e inativos
       const responsaveisQuery = `
@@ -203,7 +228,16 @@ export class ClinicaModel {
       // Fallback para dados mock
       const clinica = mockClinicas.find(c => c.id === id);
       if (!clinica) return null;
-      
+
+      const existingIds = Array.isArray(clinica.operadora_ids)
+        ? clinica.operadora_ids.filter((value): value is number => typeof value === 'number')
+        : [];
+      const fallbackId = Number(clinica.operadora_id);
+      clinica.operadora_ids = existingIds.length > 0
+        ? existingIds
+        : (Number.isInteger(fallbackId) && fallbackId > 0 ? [fallbackId] : []);
+      clinica.operadoras = clinica.operadoras || [];
+
       return {
         clinica,
         responsaveis_tecnicos: []
@@ -216,7 +250,14 @@ export class ClinicaModel {
     try {
       const selectQuery = `SELECT * FROM clinicas WHERE codigo = ?`;
       const result = await query(selectQuery, [codigo]);
-      return result.length > 0 ? processContactData(result[0]) : null;
+      if (result.length === 0) {
+        return null;
+      }
+      const clinica = processContactData(result[0]);
+      if (clinica.id) {
+        await this.enrichWithOperadoras(clinica, clinica.id);
+      }
+      return clinica;
     } catch (error) {
       console.warn('⚠️ Erro ao conectar com banco, usando dados mock:', error instanceof Error ? error.message : String(error));
       return mockClinicas.find(c => c.codigo === codigo) || null;
@@ -228,7 +269,14 @@ export class ClinicaModel {
     try {
       const selectQuery = `SELECT * FROM clinicas WHERE usuario = ?`;
       const result = await query(selectQuery, [usuario]);
-      return result.length > 0 ? processContactData(result[0]) : null;
+      if (result.length === 0) {
+        return null;
+      }
+      const clinica = processContactData(result[0]);
+      if (clinica.id) {
+        await this.enrichWithOperadoras(clinica, clinica.id);
+      }
+      return clinica;
     } catch (error) {
       console.warn('⚠️ Erro ao conectar com banco, usando dados mock:', error instanceof Error ? error.message : String(error));
       return mockClinicas.find(c => c.usuario === usuario) || null;
@@ -263,6 +311,15 @@ export class ClinicaModel {
         financeiro: clinicaData.contatos_financeiro || { telefones: [''], emails: [''] }
       });
 
+      const normalizedOperadoraIds = Array.isArray(clinicaData.operadora_ids)
+        ? clinicaData.operadora_ids
+            .map((id) => Number(id))
+            .filter((id) => Number.isInteger(id) && id > 0)
+        : (clinicaData.operadora_id !== undefined && clinicaData.operadora_id !== null
+            ? [Number(clinicaData.operadora_id)].filter((id) => Number.isInteger(id) && id > 0)
+            : []);
+      const primaryOperadoraId = normalizedOperadoraIds.length > 0 ? normalizedOperadoraIds[0] : null;
+
       const insertQuery = `
         INSERT INTO clinicas (
           nome, razao_social, codigo, cnpj, endereco_completo, contatos,
@@ -285,11 +342,13 @@ export class ClinicaModel {
         clinicaData.usuario || null,
         clinicaData.senha || null,
         clinicaData.status || 'ativo',
-        clinicaData.operadora_id || null
+        primaryOperadoraId
       ];
 
       const result = await query(insertQuery, values);
       const insertId = result.insertId;
+
+      await ClinicaOperadoraModel.setOperadorasForClinica(insertId, normalizedOperadoraIds);
 
       // Buscar a clínica recém-criada
       const novaClinica = await this.findByIdSimple(insertId);
@@ -364,10 +423,6 @@ export class ClinicaModel {
         updateFields.push('status = ?');
         values.push(clinicaData.status);
       }
-      if (clinicaData.operadora_id !== undefined) {
-        updateFields.push('operadora_id = ?');
-        values.push(clinicaData.operadora_id);
-      }
 
       // Processar endereco_completo como JSON - NOVA ESTRUTURA
       if (clinicaData.endereco_rua !== undefined || clinicaData.endereco_numero !== undefined || 
@@ -408,6 +463,22 @@ export class ClinicaModel {
         values.push(contatos);
       }
 
+      let normalizedOperadoraIds: number[] | undefined;
+      if (clinicaData.operadora_ids !== undefined) {
+        normalizedOperadoraIds = (Array.isArray(clinicaData.operadora_ids) ? clinicaData.operadora_ids : [])
+          .map((id) => Number(id))
+          .filter((id) => Number.isInteger(id) && id > 0);
+        const primaryOperadoraId = normalizedOperadoraIds.length > 0 ? normalizedOperadoraIds[0] : null;
+        updateFields.push('operadora_id = ?');
+        values.push(primaryOperadoraId);
+      } else if (clinicaData.operadora_id !== undefined) {
+        const primaryId = Number(clinicaData.operadora_id);
+        const isValidPrimary = Number.isInteger(primaryId) && primaryId > 0;
+        normalizedOperadoraIds = isValidPrimary ? [primaryId] : [];
+        updateFields.push('operadora_id = ?');
+        values.push(isValidPrimary ? primaryId : null);
+      }
+
       if (updateFields.length === 0) {
         throw new Error('Nenhum campo para atualizar');
       }
@@ -427,6 +498,10 @@ export class ClinicaModel {
         return null; // Clínica não encontrada
       }
 
+      if (normalizedOperadoraIds !== undefined) {
+        await ClinicaOperadoraModel.setOperadorasForClinica(id, normalizedOperadoraIds);
+      }
+
       // Buscar a clínica atualizada
       return await this.findByIdSimple(id);
     } catch (error) {
@@ -440,7 +515,15 @@ export class ClinicaModel {
         ...mockClinicas[clinicaIndex],
         ...clinicaData,
         updated_at: new Date().toISOString().split('T')[0]
-      };
+      } as Clinica;
+      const existingIds = Array.isArray(clinicaAtualizada.operadora_ids)
+        ? clinicaAtualizada.operadora_ids.filter((value): value is number => typeof value === 'number')
+        : [];
+      const fallbackId = Number(clinicaAtualizada.operadora_id);
+      clinicaAtualizada.operadora_ids = existingIds.length > 0
+        ? existingIds
+        : (Number.isInteger(fallbackId) && fallbackId > 0 ? [fallbackId] : []);
+      clinicaAtualizada.operadoras = clinicaAtualizada.operadoras || [];
       
       mockClinicas[clinicaIndex] = clinicaAtualizada;
       return clinicaAtualizada;
@@ -452,10 +535,26 @@ export class ClinicaModel {
     try {
       const selectQuery = `SELECT * FROM clinicas WHERE id = ?`;
       const result = await query(selectQuery, [id]);
-      return result.length > 0 ? processContactData(result[0]) : null;
+      if (result.length === 0) {
+        return null;
+      }
+      const clinica = processContactData(result[0]);
+      await this.enrichWithOperadoras(clinica, id);
+      return clinica;
     } catch (error) {
       console.warn('⚠️ Erro ao conectar com banco, usando dados mock:', error instanceof Error ? error.message : String(error));
-      return mockClinicas.find(c => c.id === id) || null;
+      const clinica = mockClinicas.find(c => c.id === id) || null;
+      if (clinica) {
+        const existingIds = Array.isArray(clinica.operadora_ids)
+          ? clinica.operadora_ids.filter((value): value is number => typeof value === 'number')
+          : [];
+        const fallbackId = Number(clinica.operadora_id);
+        clinica.operadora_ids = existingIds.length > 0
+          ? existingIds
+          : (Number.isInteger(fallbackId) && fallbackId > 0 ? [fallbackId] : []);
+        clinica.operadoras = clinica.operadoras || [];
+      }
+      return clinica;
     }
   }
   
@@ -509,8 +608,26 @@ export class ClinicaModel {
 
       const result = await query(selectQuery);
 
-      // Processar dados de contato para cada clínica
-      return result.map((clinica: any) => processContactData(clinica));
+      const clinicas = (result as any[]).map((row) => processContactData(row)) as Clinica[];
+      const ids = clinicas
+        .map((c: Clinica) => c.id)
+        .filter((id): id is number => typeof id === 'number');
+      const operadorasMap = await ClinicaOperadoraModel.getOperadorasByClinicaIds(ids);
+
+      clinicas.forEach((clinica: Clinica) => {
+        const clinicaId = clinica.id;
+        if (typeof clinicaId === 'number') {
+          const operadoras = operadorasMap[clinicaId] || [];
+          const operadoraIds = operadoras
+            .map((op) => op.id)
+            .filter((id): id is number => typeof id === 'number');
+          clinica.operadoras = operadoras;
+          clinica.operadora_ids = operadoraIds;
+          clinica.operadora_id = operadoraIds.length > 0 ? operadoraIds[0] : clinica.operadora_id;
+        }
+      });
+
+      return clinicas;
     } catch (error) {
       console.error('❌ ERRO DETALHADO ao conectar com banco:', {
         message: error instanceof Error ? error.message : 'Erro desconhecido',
@@ -553,15 +670,35 @@ export class ClinicaModel {
   static async findByOperadoraId(operadoraId: number): Promise<Clinica[]> {
     try {
       const selectQuery = `
-        SELECT * FROM clinicas 
-        WHERE operadora_id = ? AND status = 'ativo'
-        ORDER BY nome ASC
+        SELECT c.* 
+        FROM clinicas c
+        INNER JOIN clinicas_operadoras co ON co.clinica_id = c.id
+        WHERE co.operadora_id = ? AND co.status = 'ativo' AND c.status = 'ativo'
+        ORDER BY c.nome ASC
       `;
 
       const result = await query(selectQuery, [operadoraId]);
 
-      // Processar dados de contato para cada clínica
-      return result.map((clinica: any) => processContactData(clinica));
+      const clinicas = (result as any[]).map((row) => processContactData(row)) as Clinica[];
+      const ids = clinicas
+        .map((c: Clinica) => c.id)
+        .filter((id): id is number => typeof id === 'number');
+      const operadorasMap = await ClinicaOperadoraModel.getOperadorasByClinicaIds(ids);
+
+      clinicas.forEach((clinica: Clinica) => {
+        const clinicaId = clinica.id;
+        if (typeof clinicaId === 'number') {
+          const operadoras = operadorasMap[clinicaId] || [];
+          const operadoraIds = operadoras
+            .map((op) => op.id)
+            .filter((id): id is number => typeof id === 'number');
+          clinica.operadoras = operadoras;
+          clinica.operadora_ids = operadoraIds;
+          clinica.operadora_id = operadoraIds.length > 0 ? operadoraIds[0] : clinica.operadora_id;
+        }
+      });
+
+      return clinicas;
     } catch (error) {
       console.error('❌ Erro ao buscar clínicas por operadora:', error);
       throw new Error('Erro ao buscar clínicas por operadora');
@@ -571,6 +708,69 @@ export class ClinicaModel {
 
 // Modelo para Responsáveis Técnicos
 export class ResponsavelTecnicoModel {
+  
+  // Sincronizar profissional para medicos_mobile (aplicativo mobile)
+  private static async syncToMedicosMobile(responsavel: ResponsavelTecnico): Promise<void> {
+    try {
+      // Obter registro do conselho (CRM para médicos, ou outro registro para outros profissionais)
+      const crm = (responsavel as any).crm || responsavel.registro_conselho || '';
+      const email = responsavel.email ? responsavel.email.trim() : '';
+      
+      // Verificar se email e registro do conselho estão preenchidos
+      if (!email || email === '') {
+        console.log(`⏭️ [syncToMedicosMobile] Pulando sincronização - email vazio`);
+        return;
+      }
+      
+      if (!crm || crm.trim() === '') {
+        console.log(`⏭️ [syncToMedicosMobile] Pulando sincronização - registro do conselho vazio`);
+        return;
+      }
+
+      console.log(`🔄 [syncToMedicosMobile] Sincronizando profissional para medicos_mobile:`, {
+        nome: responsavel.nome,
+        tipo: responsavel.tipo_profissional,
+        email: email,
+        crm: crm,
+        clinica_id: responsavel.clinica_id
+      });
+
+      // Verificar se já existe em medicos_mobile (por email ou CRM)
+      const existingCheck = await query(
+        `SELECT id FROM medicos_mobile WHERE email = ? OR crm = ? LIMIT 1`,
+        [email, crm]
+      );
+
+      const especialidade = responsavel.especialidade_principal || '';
+      const telefone = responsavel.telefone || null;
+      const status = responsavel.status || 'ativo';
+
+      if (existingCheck.length > 0) {
+        // Atualizar existente
+        console.log(`🔄 [syncToMedicosMobile] Atualizando profissional existente (ID: ${existingCheck[0].id})`);
+        await query(
+          `UPDATE medicos_mobile 
+           SET nome = ?, email = ?, crm = ?, especialidade = ?, telefone = ?, status = ?, updated_at = NOW()
+           WHERE id = ?`,
+          [responsavel.nome, email, crm, especialidade, telefone, status, existingCheck[0].id]
+        );
+        console.log(`✅ [syncToMedicosMobile] Profissional atualizado em medicos_mobile`);
+      } else {
+        // Criar novo
+        console.log(`🆕 [syncToMedicosMobile] Criando novo profissional em medicos_mobile`);
+        await query(
+          `INSERT INTO medicos_mobile 
+           (clinica_id, nome, email, crm, especialidade, telefone, status, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+          [responsavel.clinica_id, responsavel.nome, email, crm, especialidade, telefone, status]
+        );
+        console.log(`✅ [syncToMedicosMobile] Profissional criado em medicos_mobile`);
+      }
+    } catch (error) {
+      // Não falhar a criação do responsável técnico se a sincronização falhar
+      console.error('⚠️ [syncToMedicosMobile] Erro ao sincronizar para medicos_mobile (não crítico):', error);
+    }
+  }
   
   // Criar responsável técnico (novo schema: tabela 'responsaveis_tecnicos')
   static async create(responsavelData: ResponsavelTecnicoCreateInput): Promise<ResponsavelTecnico> {
@@ -612,6 +812,39 @@ export class ResponsavelTecnicoModel {
       const newResponsavel = await this.findById(insertId);
       if (!newResponsavel) {
         throw new Error('Erro ao buscar responsável recém-criado');
+      }
+      
+      // Sincronizar para medicos_mobile (todos os profissionais com email e registro)
+      await this.syncToMedicosMobile(newResponsavel);
+      
+      // Enviar email de boas-vindas se o profissional tiver email cadastrado
+      if (newResponsavel.email && newResponsavel.email.trim() !== '') {
+        try {
+          // Buscar dados da clínica para incluir no email
+          const clinicaProfile = await ClinicaModel.findById(newResponsavel.clinica_id);
+          const clinicaNome = clinicaProfile?.clinica?.nome || 'Clínica';
+          
+          console.log(`📧 [ResponsavelTecnicoModel.create] Enviando email de boas-vindas para: ${newResponsavel.email}`);
+          
+          const emailEnviado = await emailService.sendProfissionalWelcomeEmail(
+            newResponsavel.email,
+            newResponsavel.nome,
+            clinicaNome,
+            newResponsavel.registro_conselho,
+            newResponsavel.tipo_profissional
+          );
+          
+          if (emailEnviado) {
+            console.log(`✅ [ResponsavelTecnicoModel.create] Email de boas-vindas enviado com sucesso para: ${newResponsavel.email}`);
+          } else {
+            console.warn(`⚠️ [ResponsavelTecnicoModel.create] Falha ao enviar email de boas-vindas para: ${newResponsavel.email}`);
+          }
+        } catch (emailError) {
+          // Não falhar o cadastro se o email não for enviado
+          console.error(`❌ [ResponsavelTecnicoModel.create] Erro ao enviar email de boas-vindas:`, emailError);
+        }
+      } else {
+        console.log(`ℹ️ [ResponsavelTecnicoModel.create] Profissional cadastrado sem email, email de boas-vindas não será enviado`);
       }
       
       return newResponsavel;
@@ -734,7 +967,14 @@ export class ResponsavelTecnicoModel {
       }
       
       // Buscar o responsável atualizado
-      return await this.findById(id);
+      const updatedResponsavel = await this.findById(id);
+      
+      // Sincronizar para medicos_mobile (todos os profissionais com email e registro)
+      if (updatedResponsavel) {
+        await this.syncToMedicosMobile(updatedResponsavel);
+      }
+      
+      return updatedResponsavel;
     } catch (error) {
       console.error('Erro ao atualizar responsável:', error);
       throw new Error('Erro ao atualizar responsável');

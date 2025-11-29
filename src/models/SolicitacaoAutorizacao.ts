@@ -78,7 +78,19 @@ export class SolicitacaoAutorizacaoModel {
       dadosSolicitacao.medico_assinatura_crm,
       dadosSolicitacao.numero_autorizacao || null,
       dadosSolicitacao.observacoes || null,
-      'pendente' // status padrão
+      // Definir status baseado no método de autenticação
+      // Se autenticado por email ou app móvel, status é 'aprovada'
+      // Caso contrário, 'pendente'
+      (() => {
+        const metodoAuth = (dadosSolicitacao as any).medico_assinatura_metodo;
+        console.log('🔍 [SolicitacaoAutorizacaoModel.create] Método de autenticação:', metodoAuth);
+        if (metodoAuth === 'email_otp' || metodoAuth === 'app_mobile') {
+          console.log('✅ [SolicitacaoAutorizacaoModel.create] Status definido como: aprovada');
+          return 'aprovada';
+        }
+        console.log('⏳ [SolicitacaoAutorizacaoModel.create] Status definido como: pendente');
+        return 'pendente';
+      })()
     ];
 
     try {

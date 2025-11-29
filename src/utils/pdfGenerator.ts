@@ -490,7 +490,7 @@ const generateFooterTemplate = (): string => {
             line-height: 1.2;
             margin: 0;
             font-size: 8px;
-          ">Onkhos - Oncologia Clínica</p>
+          ">OnkoLink - Oncologia Clínica</p>
         </div>
         
         <div style="

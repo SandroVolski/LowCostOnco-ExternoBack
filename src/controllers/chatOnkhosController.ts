@@ -10,16 +10,17 @@ export class ChatOnkhosController {
   static async getUserChats(req: Request, res: Response): Promise<void> {
     try {
       const user = (req as any).user;
-      const userId = user.id;
       const userType = user.tipo === 'operadora' ? 'operadora' : 'clinica';
 
       let chats;
 
       if (userType === 'operadora') {
+        const operadoraId = user.operadora_id || user.operadoraId || user.id;
         // Para operadoras, buscar clínicas credenciadas com conversas
-        chats = await ChatOnkhosModel.getClinicasCredenciadas(userId);
+        chats = await ChatOnkhosModel.getClinicasCredenciadas(operadoraId);
       } else {
-        chats = await ChatOnkhosModel.getConversasClinica(userId);
+        const clinicaId = user.clinica_id || user.id;
+        chats = await ChatOnkhosModel.getConversasClinica(clinicaId);
       }
 
       res.json({
@@ -40,6 +41,8 @@ export class ChatOnkhosController {
     try {
       const chatId = parseInt(req.params.id);
       const user = (req as any).user;
+      const operadoraIdAuth = user.operadora_id || user.operadoraId || user.id;
+      const clinicaIdAuth = user.clinica_id || user.clinicaId || user.id;
       
       if (isNaN(chatId)) {
         res.status(400).json({
@@ -61,8 +64,8 @@ export class ChatOnkhosController {
       
       // Verificar se o usuário tem acesso ao chat
       const userType = user.tipo === 'operadora' ? 'operadora' : 'clinica';
-      const hasAccess = (userType === 'operadora' && chat.operadora_id === user.id) ||
-                       (userType === 'clinica' && chat.clinica_id === user.id);
+      const hasAccess = (userType === 'operadora' && chat.operadora_id === operadoraIdAuth) ||
+                        (userType === 'clinica' && chat.clinica_id === clinicaIdAuth);
       
       if (!hasAccess) {
         res.status(403).json({
@@ -93,6 +96,8 @@ export class ChatOnkhosController {
       const offset = parseInt(req.query.offset as string) || 0;
       const lastId = req.query.last_id ? parseInt(req.query.last_id as string) : undefined;
       const user = (req as any).user;
+      const operadoraIdAuth = user.operadora_id || user.operadoraId || user.id;
+      const clinicaIdAuth = user.clinica_id || user.clinicaId || user.id;
 
       if (isNaN(chatId)) {
         res.status(400).json({
@@ -113,8 +118,8 @@ export class ChatOnkhosController {
       }
 
       const userType = user.tipo === 'operadora' ? 'operadora' : 'clinica';
-      const hasAccess = (userType === 'operadora' && chat.operadora_id === user.id) ||
-                       (userType === 'clinica' && chat.clinica_id === user.id);
+      const hasAccess = (userType === 'operadora' && chat.operadora_id === operadoraIdAuth) ||
+                       (userType === 'clinica' && chat.clinica_id === clinicaIdAuth);
 
       if (!hasAccess) {
         res.status(403).json({
@@ -170,6 +175,8 @@ export class ChatOnkhosController {
     try {
       const chatId = parseInt(req.params.id);
       const user = (req as any).user;
+      const operadoraIdAuth = user.operadora_id || user.operadoraId || user.id;
+      const clinicaIdAuth = user.clinica_id || user.clinicaId || user.id;
       const { content, message_type = 'texto' } = req.body;
 
       if (isNaN(chatId)) {
@@ -199,8 +206,8 @@ export class ChatOnkhosController {
       }
 
       const userType = user.tipo === 'operadora' ? 'operadora' : 'clinica';
-      const hasAccess = (userType === 'operadora' && chat.operadora_id === user.id) ||
-                       (userType === 'clinica' && chat.clinica_id === user.id);
+      const hasAccess = (userType === 'operadora' && chat.operadora_id === operadoraIdAuth) ||
+                       (userType === 'clinica' && chat.clinica_id === clinicaIdAuth);
 
       if (!hasAccess) {
         res.status(403).json({
@@ -254,6 +261,8 @@ export class ChatOnkhosController {
   static async findOrCreateOperadoraClinicaChat(req: Request, res: Response): Promise<void> {
     try {
       const user = (req as any).user;
+      const operadoraIdAuth = user.operadora_id || user.id;
+      const clinicaIdAuth = user.clinica_id || user.id;
       const { operadora_id, clinica_id } = req.body;
       
       if (!operadora_id || !clinica_id) {
@@ -265,7 +274,7 @@ export class ChatOnkhosController {
       }
       
       // Verificar se o usuário tem permissão para acessar este chat
-      if (user.tipo === 'operadora' && user.id !== operadora_id) {
+      if (user.tipo === 'operadora' && operadoraIdAuth !== operadora_id) {
         res.status(403).json({
           success: false,
           message: 'Você só pode acessar chats da sua operadora'
@@ -273,7 +282,7 @@ export class ChatOnkhosController {
         return;
       }
       
-      if (user.tipo === 'clinica' && (user.id !== clinica_id || user.operadora_id !== operadora_id)) {
+      if (user.tipo === 'clinica' && (clinicaIdAuth !== clinica_id || (user.operadora_id || user.operadoraId) !== operadora_id)) {
         res.status(403).json({
           success: false,
           message: 'Você só pode acessar chats com sua operadora'
@@ -301,9 +310,11 @@ export class ChatOnkhosController {
   static async getUnreadCount(req: Request, res: Response): Promise<void> {
     try {
       const user = (req as any).user;
-      const userId = user.id;
       const userType = user.tipo === 'operadora' ? 'operadora' : 'clinica';
-      
+      const userId = userType === 'operadora'
+        ? (user.operadora_id || user.operadoraId || user.id)
+        : (user.clinica_id || user.clinicaId || user.id);
+
       const totalUnread = await ChatOnkhosModel.countMensagensNaoLidas(userId, userType);
       
       res.json({
@@ -327,6 +338,8 @@ export class ChatOnkhosController {
     try {
       const chatId = parseInt(req.params.id);
       const user = (req as any).user;
+      const operadoraIdAuth = user.operadora_id || user.operadoraId || user.id;
+      const clinicaIdAuth = user.clinica_id || user.clinicaId || user.id;
       
       if (isNaN(chatId)) {
         res.status(400).json({
@@ -347,8 +360,8 @@ export class ChatOnkhosController {
       }
       
       const userType = user.tipo === 'operadora' ? 'operadora' : 'clinica';
-      const hasAccess = (userType === 'operadora' && chat.operadora_id === user.id) ||
-                       (userType === 'clinica' && chat.clinica_id === user.id);
+      const hasAccess = (userType === 'operadora' && chat.operadora_id === operadoraIdAuth) ||
+                       (userType === 'clinica' && chat.clinica_id === clinicaIdAuth);
       
       if (!hasAccess) {
         res.status(403).json({
@@ -378,6 +391,8 @@ export class ChatOnkhosController {
     try {
       const user = (req as any).user;
       const { type, operadora_id, clinica_id, name, description } = req.body;
+      const operadoraIdAuth = user.operadora_id || user.operadoraId || user.id;
+      const clinicaIdAuth = user.clinica_id || user.clinicaId || user.id;
       
       // Para o sistema simplificado, sempre criar conversa individual
       if (!operadora_id || !clinica_id) {
@@ -389,7 +404,7 @@ export class ChatOnkhosController {
       }
       
       // Verificar permissões
-      if (user.tipo === 'operadora' && user.id !== operadora_id) {
+      if (user.tipo === 'operadora' && operadoraIdAuth !== operadora_id) {
         res.status(403).json({
           success: false,
           message: 'Operadoras só podem criar chats para si mesmas'
@@ -397,7 +412,7 @@ export class ChatOnkhosController {
         return;
       }
       
-      if (user.tipo === 'clinica' && (user.id !== clinica_id || user.operadora_id !== operadora_id)) {
+      if (user.tipo === 'clinica' && (clinicaIdAuth !== clinica_id || (user.operadora_id || user.operadoraId) !== operadora_id)) {
         res.status(403).json({
           success: false,
           message: 'Clínicas só podem criar chats com sua operadora'
@@ -440,11 +455,11 @@ export class ChatOnkhosController {
 
       // Determinar quem é operadora e quem é clínica
       if (user.tipo === 'operadora') {
-        operadoraId = user.id;
+        operadoraId = user.operadora_id || user.operadoraId || user.id;
         clinicaId = targetUserId;
       } else if (user.tipo === 'clinica') {
         operadoraId = targetUserId;
-        clinicaId = user.id;
+        clinicaId = user.clinica_id || user.clinicaId || user.id;
       } else {
         res.status(400).json({
           success: false,
@@ -475,6 +490,8 @@ export class ChatOnkhosController {
     try {
       const chatId = parseInt(req.params.id);
       const user = (req as any).user;
+      const operadoraIdAuth = user.operadora_id || user.id;
+      const clinicaIdAuth = user.clinica_id || user.id;
       const file = req.file;
 
       if (isNaN(chatId)) {
@@ -504,8 +521,8 @@ export class ChatOnkhosController {
       }
 
       const userType = user.tipo === 'operadora' ? 'operadora' : 'clinica';
-      const hasAccess = (userType === 'operadora' && chat.operadora_id === user.id) ||
-                       (userType === 'clinica' && chat.clinica_id === user.id);
+      const hasAccess = (userType === 'operadora' && chat.operadora_id === operadoraIdAuth) ||
+                       (userType === 'clinica' && chat.clinica_id === clinicaIdAuth);
 
       if (!hasAccess) {
         res.status(403).json({
