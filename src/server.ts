@@ -53,7 +53,18 @@ const corsOrigins = process.env.CORS_ORIGIN
 const corsConfig = {
   origin: corsOrigins,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'] as string[],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-Secret', 'x-admin-secret'] as string[],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Admin-Secret', 
+    'x-admin-secret',
+    'Cache-Control',
+    'cache-control',
+    'Pragma',
+    'If-Modified-Since',
+    'If-None-Match',
+    'ETag'
+  ] as string[],
   credentials: true,
   preflightContinue: false,
   optionsSuccessStatus: 204
